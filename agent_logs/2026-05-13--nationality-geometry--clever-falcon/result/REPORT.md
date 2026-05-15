@@ -8,7 +8,7 @@ Probe whether Llama-3.1-8B internally represents European country geometry as a 
 
 ## 2. Headline finding
 
-**Llama-3.1-8B encodes European country relations as a single, globally coherent ~2-D geographic map.** Regressing capital (latitude, longitude) onto the per-answer-country centroid PCs yields PC0 R² = 0.77 loading almost purely on latitude and PC1 R² = 0.83 loading almost purely on longitude, with near-zero off-axis coefficients and a best-fit in-plane rotation of only −11.7° (combined R² = 1.604 ≈ raw PC0+PC1 sum) — PCA recovers the geographic frame natively (`result/country_borders_geometry.ipynb`, geographic-isomorphism cell). **This alignment is strongly significant: a 2000-permutation null over country↔coordinate assignments never reaches it (p = 0.0005; null max 0.55 vs observed 1.60), and the bootstrap 95% CI [1.24, 1.80] sits entirely above the null (`result/geometry_robustness.json`).** Bordering-country pairs are 2–10× closer than the global median cosine distance while unrelated distant pairs are farther. Every non-geographic axis fails to survive controls: EU membership is not decodable at all (probe lift −0.10), and the Cold-War East/West and linguistic-family signals collapse to chance once geography is partialled out (§6.3). The representation is *specifically* geographic.
+**Llama-3.1-8B encodes European country relations as a single, globally coherent ~2-D geographic map.** Regressing capital (latitude, longitude) onto the per-answer-country centroid PCs yields PC0 R² = 0.77 loading almost purely on latitude and PC1 R² = 0.83 loading almost purely on longitude, with near-zero off-axis coefficients and a best-fit in-plane rotation of only −11.7° (combined R² = 1.604 ≈ raw PC0+PC1 sum) — PCA recovers the geographic frame natively (`result/country_borders_geometry.ipynb`, geographic-isomorphism cell). **This alignment is strongly significant: a 2000-permutation null over country↔coordinate assignments never reaches it (p = 0.0005; null max 0.55 vs observed 1.60), and the bootstrap 95% CI [1.24, 1.80] sits entirely above the null (`result/geometry_robustness.json`).** Bordering-country pairs are 2–10× closer than the global median cosine distance while unrelated distant pairs are farther. Every non-geographic axis fails to survive controls: EU membership is not decodable at all (probe lift −0.10), and the Cold-War East/West and linguistic-family signals collapse to chance once geography is partialled out (§6.3). The representation is *specifically* geographic. (This clean map is specific to the *relational answer* position; the direct entity-token readout at the same layer is far weaker and a different geometry — see §6.4, which raises an unresolved layer confound before any "computed vs. stored" claim.)
 
 ## 3. Verdict against success criteria
 
@@ -77,6 +77,17 @@ Probe whether Llama-3.1-8B internally represents European country geometry as a 
 - **Interpretation**: The map is statistically robust, not an artifact of few points — observed R² lies entirely outside the null and the bootstrap CI never enters it. The residual probe converts §6.2's hedged claims into measurements: East/West is *exactly* longitude relabeled (lift drops to precisely chance) and linguistic family carries *zero* signal independent of geography (drops below chance). Both apparent secondary axes are geographic shadows.
 - **Artifacts**: `result/geometry_robustness.json`, `result/figures/geometry_null_hist.png` (computed on RunPod against the subspace features, transported back via the lightweight git path).
 
+### 6.4 retrieval vs. computation — #2 (`code/analyses/retrieval_vs_computation.py`)
+
+- **Research question**: Is the coherent Europe map a property of the *stored* entity representation (Gurnee & Tegmark-style direct readout) or of the *relational computation's* output? Within-task controlled contrast — identical prompts / model / layer 28 / PCA-32, differing only in read position: last-token answer (relational, aggregated by answer country) vs. country entity token (direct, grouped by named country).
+- **Key numbers** (`result/retrieval_vs_computation.json`):
+  - Relational (computed): combined R² 1.604/2.0 (PC0≈lat 0.77, PC1≈lon 0.83); permutation p = 0.0005; CI [1.24, 1.80].
+  - Direct (stored, entity token @ L28): combined R² **0.546**/2.0, **PC0 R² = 0.00** (no geographic content in the dominant axis; weak signal only in PC1 0.55 / PC2 0.48); p = 0.003 but bootstrap CI [0.31, 1.32] very wide.
+  - Same map? Procrustes over 30 shared countries: disparity **0.89** (≈ maximally dissimilar), aligned-coord r **0.33** — the two geometries are largely distinct.
+- ![retrieval vs computation](figures/retrieval_vs_computation.png)
+- **Interpretation**: At layer 28 the coherent map lives at the relational answer position and is largely absent / a different geometry at the entity-token position — *suggestive* that the map is assembled by the relational computation rather than read from a static store. **Not yet conclusive**: the direct/stored condition was pinned to layer 28 (a relational-task carry-forward), whereas prior work finds the stored world-map by sweeping layers and taking the best. The strong "computed not stored" claim requires the layer-sweep control (§10); the defensible statement for now is the layer-28-, position-specific one above.
+- **Artifacts**: `result/retrieval_vs_computation.json`, `result/figures/retrieval_vs_computation.png`.
+
 ## 7. Paper comparison
 
 *(not a replication session)*
@@ -96,9 +107,8 @@ Probe whether Llama-3.1-8B internally represents European country geometry as a 
 
 ## 10. Suggested next steps
 
-- **Retrieval-vs-computation contrast (differentiating experiment)**: build centroids two ways — the border-task answer position (relational, current) vs. direct entity probing à la Gurnee & Tegmark (arXiv 2310.02207). If the relational geometry is as clean, the headline becomes "the map is *traversed by relational computation*, not merely stored" — the novelty against prior spatial-representation work.
+- **Layer-sweep control (now the decisive experiment)**: §6.4 found the map at the relational answer position but a weak / different geometry at the entity-token position *at layer 28 only*. Sweep both conditions across layers (e.g. 0,4,…,31) and compare best-vs-best. Relational ≫ direct at *every* layer ⇒ the map is constructed by the relational computation (strong, novel). Direct catches up at some layer ⇒ stored & computed maps at different depths (refined story). **Until this runs, do not publish the "traversed not stored" headline.** This also subsumes the previously-listed "complete locate" step.
 - **Causal intervention along the recovered axes**: steer/patch activations along the longitude PC and show the model's directional answer moves causally (e.g. "east of Germany" Poland↔France). Converts the correlational geometry into a causal claim — the highest-value follow-up and squarely in the causal-abstraction methodology causalab is built for.
-- **Complete locate** and rerun subspace at the empirically-selected layer, to verify the map is strongest where country-border information actually peaks rather than at the layer-28 carry-forward.
 - **Promote to a reusable module**: `code/analyses/geometry_robustness.py` is the seed; fold the notebook's centroid/regression/probe pipeline in beside it and lift the whole thing into a session-local (then shipped) causalab analysis.
 - **Generalize**: repeat on a second base model of similar scale to test whether the coherent-Europe-map result is model-specific.
 
@@ -108,5 +118,5 @@ Probe whether Llama-3.1-8B internally represents European country geometry as a 
 - Paper context (replication only): *(not a replication session)*
 - Resolved config: *(absent — runs were notebook-driven; params from `artifacts/country_borders/llama31_8b/baseline/metadata.json`)*
 - Run log: `run/baseline_rerun.log`, `run/llama31_8b_validation.log`
-- Geometry numbers source: `result/country_borders_geometry.ipynb` (§6.2); `result/geometry_robustness.json` + `code/analyses/geometry_robustness.py` (§6.3)
+- Geometry numbers source: `result/country_borders_geometry.ipynb` (§6.2); `result/geometry_robustness.json` + `code/analyses/geometry_robustness.py` (§6.3); `result/retrieval_vs_computation.json` + `code/analyses/retrieval_vs_computation.py` (§6.4)
 - Cross-session references: none

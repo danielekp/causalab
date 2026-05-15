@@ -1,7 +1,7 @@
 # Sharing package — country_borders geometry
 
 Draft artifacts for publicizing the result and getting Goodfire's attention.
-Status: defensibility done (Phase-1 #3/#5); narrative upgrades (#2 retrieval-vs-computation, #4 locate) still TODO and are flagged honestly throughout. Do not publish claims #2 would settle until #2 is run.
+Status: defensibility done (Phase-1 #3/#5). #2 retrieval-vs-computation **has run** (REPORT §6.4) with a *surprising* result: at layer 28 the map is strong at the relational answer position but weak/different at the direct entity-token position (combined R² 1.60 vs 0.55; Procrustes disparity 0.89). This is *suggestive* of "computed not stored" but is confounded by the fixed layer — the direct/stored condition was not given its best layer. **The publishable headline is now gated on the layer-sweep control (REPORT §10), not merely on #2 having run.** Do not publish the "traversed vs. stored" framing until the layer sweep resolves the confound.
 
 ---
 
