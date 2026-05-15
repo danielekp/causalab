@@ -68,7 +68,7 @@ Probe whether Llama-3.1-8B internally represents European country geometry as a 
 
 ### 6.3 geometry robustness — Phase-1 (`code/analyses/geometry_robustness.py`)
 
-- **Research question**: Is the geographic-isomorphism R² significant given only ~28 centroid points, and are the East/West and linguistic-family signals independent of geography?
+- **Research question**: Is the geographic-isomorphism R² significant given only 30 centroid points, and are the East/West and linguistic-family signals independent of geography?
 - **Key numbers** (`result/geometry_robustness.json`):
   - **Permutation null** (2000 shuffles of country↔coordinate assignment): observed combined R² 1.6044; p = 0.0005 (no permutation reached it); null mean 0.143, p95 0.323, max 0.553.
   - **Bootstrap** (2000 country resamples): 95% CI [1.240, 1.805], median 1.612 — the lower bound is ~2× the null max.
@@ -90,7 +90,7 @@ Probe whether Llama-3.1-8B internally represents European country geometry as a 
 - **No formal plan artifacts**: `plan/RESEARCH_OBJECTIVE.md` and `plan/PLAN.md` were never created (session used `/setup-task`); objective, success criteria, and hypotheses here are reconstructed from `README.md` and the notebook design. No `run/<runner>_resolved.yaml` exists — the runs were notebook-driven; run parameters are taken from `artifacts/.../baseline/metadata.json`.
 - **Subspace artifacts not local**: the 733 MB of activations/features remained on the RunPod GPU and were intentionally excluded from transport. The §6.2 geometry numbers are sourced from the *executed notebook's embedded outputs*; the §6.3 robustness numbers are the one re-loaded artifact (`geometry_robustness.json`, recomputed on RunPod against the same features). Full re-derivation requires a box with the subspace features.
 - **Locate incomplete**: only per-layer feature tensors were produced; no interchange `results.json`/`heatmap.png`. Layer 28 was a carry-forward, **not** an empirically located optimum — the geometry result is not guaranteed to be at the layer where country-border information peaks.
-- **Small but now-quantified point count**: ~28 centroids / 2 regressors. Resolved in §6.3 — permutation p = 0.0005 and bootstrap 95% CI [1.24, 1.80] both clear the null by a wide margin. The bootstrap CI is moderately wide (~0.57 span), reflecting the small country set; a larger country set would tighten it. Capital coordinates remain a country-position proxy.
+- **Small but now-quantified point count**: 30 centroids / 2 regressors. Resolved in §6.3 — permutation p = 0.0005 and bootstrap 95% CI [1.24, 1.80] both clear the null by a wide margin. The bootstrap CI is moderately wide (~0.56 span), reflecting the small country set; a larger country set would tighten it. Capital coordinates remain a country-position proxy.
 - **Direction not cleanly isolated** (`counterfactual_sanity.json`): the directional input is a weak causal lever in the sanity check — the manifold may encode country position more than the border *relation* per se. Open question, addressed by the planned retrieval-vs-computation contrast (§10).
 - Single model, single (carry-forward) layer.
 
