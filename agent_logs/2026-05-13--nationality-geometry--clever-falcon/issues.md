@@ -35,3 +35,25 @@ and the canonical multi-template precedent (`causalab/tasks/natural_domains_arit
 **Fix planned:** Swap the cheap-fallback model. `google/gemma-3-1b-pt` (pretrained, non-gated, ~1B params, already cached) is the natural replacement — pretrained completion model suits our raw next-token task better than an instruction-tuned chat model anyway.
 
 The spec at `causalab/tasks/nationality_capitals/set_up_task.md` still lists Llama-3.2-1B-Instruct in its `models:` block; this should be updated alongside whatever we actually validate against. Cheap-fallback choice is a session-level decision, not a permanent task-spec one.
+
+## interpret-experiment workflow (country_borders, 2026-05-15)
+
+- **[UNEXPECTED]** `locate/interchange` produced only per-layer feature tensors, no scoring
+  - Context: interpreting country_borders to write REPORT.md
+  - `artifacts/country_borders/llama31_8b/locate/interchange/country/features/` has L0–L28 `*_features.safetensors` but no `results.json` / `heatmap.png` — the interchange scoring/heatmap step never produced a layer sweep
+  - Consequence: subspace ran at layer 28 as an unvalidated **carry-forward**, not an empirically located optimum. The geometry result is not guaranteed to sit at the layer where country-border information peaks. Flagged in REPORT §9 and as a next step.
+
+- **[CONFUSION]** No plan or resolved-config artifacts for a notebook-driven session
+  - Context: interpret-experiment Steps 1–2 expect `plan/RESEARCH_OBJECTIVE.md`, `plan/PLAN.md`, `run/<runner>_resolved.yaml`
+  - This session was scaffolded via `/setup-task` and driven entirely from `result/country_borders_geometry.ipynb` (runner YAMLs written by the notebook's `run_session`), so none of those files exist; only `plan/set_up_task_draft.md` is present
+  - Workaround: reconstructed objective/hypotheses from `README.md` + notebook design; took run params from `baseline/metadata.json`. The skill handled the gap (recorded in REPORT §9/§11) but the plan-vs-reality diff step is moot for notebook-driven sessions — worth the skill acknowledging this mode explicitly.
+
+- **[WORKAROUND]** Geometry numbers sourced from executed-notebook outputs, not on-disk JSON
+  - Context: experiment was run on a RunPod GPU; only lightweight result files (notebook, figures, `accuracy.json`) were transported back via the `port/country-borders-session` git branch
+  - The ~733 MB of subspace raw artifacts (`training_features.safetensors`, `train_dataset.json`, shipped `features_2d/3d` viz) stayed on the remote and were intentionally excluded from git
+  - Consequence: REPORT §6.2 cites `result/country_borders_geometry.ipynb` embedded cell outputs as provenance for all geometry numbers (not re-loaded JSON). Fully reproducible only on a box that still has the artifacts. This is an expected cost of the cloud-GPU split, documented so the provenance is legible.
+
+- **[UNEXPECTED]** `counterfactual_sanity.json`: `change_direction` proportion 0.0
+  - Context: reading baseline sanity artifact
+  - `change_country` 0.969 and `random` 0.906 (country is a strong causal lever) but `change_direction` 0.0 and `change_template` 0.0
+  - `change_template` 0.0 is expected/correct (paraphrase must not change the answer). `change_direction` 0.0 is a genuine caveat: the direction input is a weak / uncleanly-isolated causal lever — likely many direction-counterfactuals land on geographically-invalid cells (empty `raw_output`). Interpreted in REPORT §6.1/§9 as: the manifold may encode country *position* more than the border *relation* per se. Open question for follow-up.
