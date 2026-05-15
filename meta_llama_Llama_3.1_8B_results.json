@@ -1,0 +1,134 @@
+{
+  "model": "meta-llama/Llama-3.1-8B",
+  "n": 40,
+  "correct": 26,
+  "accuracy": 0.65,
+  "load_s": 1.9919540882110596,
+  "gen_s": 740.000559091568,
+  "per_template": {
+    "3": 0.8888888888888888,
+    "2": 0.9090909090909091,
+    "1": 0.15384615384615385,
+    "0": 0.8571428571428571
+  },
+  "per_continent": {
+    "Asia": 0.7,
+    "Europe": 0.7272727272727273,
+    "North America": 0.8,
+    "South America": 0.5,
+    "Africa": 0.5,
+    "Oceania": 0.5
+  },
+  "token_align": [
+    {
+      "input": "The capital city of Thailand is",
+      "expected": " Bangkok",
+      "got": " Bangkok",
+      "expected_ids": [
+        60116
+      ],
+      "actual_ids": [
+        60116
+      ],
+      "first_token_match": true
+    },
+    {
+      "input": "When you visit Italy, the capital city you'd arrive in is",
+      "expected": " Rome",
+      "got": " Rome",
+      "expected_ids": [
+        22463
+      ],
+      "actual_ids": [
+        22463
+      ],
+      "first_token_match": true
+    },
+    {
+      "input": "The capital city of Cuba is",
+      "expected": " Havana",
+      "got": " Havana",
+      "expected_ids": [
+        86975
+      ],
+      "actual_ids": [
+        86975
+      ],
+      "first_token_match": true
+    }
+  ],
+  "misses": [
+    {
+      "country": "Colombia",
+      "tmpl": 1,
+      "expected": " Bogot\u00e1",
+      "got": " a"
+    },
+    {
+      "country": "Cuba",
+      "tmpl": 1,
+      "expected": " Havana",
+      "got": " a"
+    },
+    {
+      "country": "Argentina",
+      "tmpl": 1,
+      "expected": " Buenos Aires",
+      "got": " a"
+    },
+    {
+      "country": "China",
+      "tmpl": 1,
+      "expected": " Beijing",
+      "got": " a"
+    },
+    {
+      "country": "Spain",
+      "tmpl": 0,
+      "expected": " Madrid",
+      "got": " a"
+    },
+    {
+      "country": "France",
+      "tmpl": 3,
+      "expected": " Paris",
+      "got": " a"
+    },
+    {
+      "country": "Japan",
+      "tmpl": 1,
+      "expected": " Tokyo",
+      "got": " a"
+    },
+    {
+      "country": "Egypt",
+      "tmpl": 1,
+      "expected": " Cairo",
+      "got": " a"
+    },
+    {
+      "country": "Morocco",
+      "tmpl": 1,
+      "expected": " Rabat",
+      "got": " a"
+    },
+    {
+      "country": "Argentina",
+      "tmpl": 1,
+      "expected": " Buenos Aires",
+      "got": " a"
+    },
+    {
+      "country": "Australia",
+      "tmpl": 2,
+      "expected": " Canberra",
+      "got": " Sydney"
+    },
+    {
+      "country": "China",
+      "tmpl": 1,
+      "expected": " Beijing",
+      "got": " a"
+    }
+  ]
+}

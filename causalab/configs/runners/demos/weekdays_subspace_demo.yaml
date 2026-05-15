@@ -11,7 +11,7 @@ task:
 
 subspace:
   method: pca
-  layers: [28]
+  layers: [18]
   k_features: 32
   token_positions: [last_token]
   visualization:

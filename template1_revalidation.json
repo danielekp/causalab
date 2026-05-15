@@ -1,0 +1,286 @@
+{
+  "accuracy": 1.0,
+  "results": [
+    {
+      "country": "France",
+      "continent": "Europe",
+      "expected": " Paris",
+      "got": " Paris",
+      "correct": true
+    },
+    {
+      "country": "Germany",
+      "continent": "Europe",
+      "expected": " Berlin",
+      "got": " Berlin",
+      "correct": true
+    },
+    {
+      "country": "Italy",
+      "continent": "Europe",
+      "expected": " Rome",
+      "got": " Rome",
+      "correct": true
+    },
+    {
+      "country": "Spain",
+      "continent": "Europe",
+      "expected": " Madrid",
+      "got": " Madrid",
+      "correct": true
+    },
+    {
+      "country": "Britain",
+      "continent": "Europe",
+      "expected": " London",
+      "got": " London",
+      "correct": true
+    },
+    {
+      "country": "Russia",
+      "continent": "Europe",
+      "expected": " Moscow",
+      "got": " Moscow",
+      "correct": true
+    },
+    {
+      "country": "Greece",
+      "continent": "Europe",
+      "expected": " Athens",
+      "got": " Athens",
+      "correct": true
+    },
+    {
+      "country": "Sweden",
+      "continent": "Europe",
+      "expected": " Stockholm",
+      "got": " Stockholm",
+      "correct": true
+    },
+    {
+      "country": "Poland",
+      "continent": "Europe",
+      "expected": " Warsaw",
+      "got": " Warsaw",
+      "correct": true
+    },
+    {
+      "country": "Portugal",
+      "continent": "Europe",
+      "expected": " Lisbon",
+      "got": " Lisbon",
+      "correct": true
+    },
+    {
+      "country": "Austria",
+      "continent": "Europe",
+      "expected": " Vienna",
+      "got": " Vienna",
+      "correct": true
+    },
+    {
+      "country": "Norway",
+      "continent": "Europe",
+      "expected": " Oslo",
+      "got": " Oslo",
+      "correct": true
+    },
+    {
+      "country": "Egypt",
+      "continent": "Africa",
+      "expected": " Cairo",
+      "got": " Cairo",
+      "correct": true
+    },
+    {
+      "country": "Nigeria",
+      "continent": "Africa",
+      "expected": " Abuja",
+      "got": " Abu",
+      "correct": true
+    },
+    {
+      "country": "Kenya",
+      "continent": "Africa",
+      "expected": " Nairobi",
+      "got": " Nairobi",
+      "correct": true
+    },
+    {
+      "country": "Morocco",
+      "continent": "Africa",
+      "expected": " Rabat",
+      "got": " Rab",
+      "correct": true
+    },
+    {
+      "country": "Ethiopia",
+      "continent": "Africa",
+      "expected": " Addis Ababa",
+      "got": " Add",
+      "correct": true
+    },
+    {
+      "country": "Senegal",
+      "continent": "Africa",
+      "expected": " Dakar",
+      "got": " Dak",
+      "correct": true
+    },
+    {
+      "country": "Ghana",
+      "continent": "Africa",
+      "expected": " Accra",
+      "got": " Acc",
+      "correct": true
+    },
+    {
+      "country": "Tunisia",
+      "continent": "Africa",
+      "expected": " Tunis",
+      "got": " Tunis",
+      "correct": true
+    },
+    {
+      "country": "China",
+      "continent": "Asia",
+      "expected": " Beijing",
+      "got": " Beijing",
+      "correct": true
+    },
+    {
+      "country": "Japan",
+      "continent": "Asia",
+      "expected": " Tokyo",
+      "got": " Tokyo",
+      "correct": true
+    },
+    {
+      "country": "India",
+      "continent": "Asia",
+      "expected": " New Delhi",
+      "got": " New",
+      "correct": true
+    },
+    {
+      "country": "Vietnam",
+      "continent": "Asia",
+      "expected": " Hanoi",
+      "got": " H",
+      "correct": true
+    },
+    {
+      "country": "Thailand",
+      "continent": "Asia",
+      "expected": " Bangkok",
+      "got": " Bangkok",
+      "correct": true
+    },
+    {
+      "country": "Indonesia",
+      "continent": "Asia",
+      "expected": " Jakarta",
+      "got": " Jakarta",
+      "correct": true
+    },
+    {
+      "country": "Iran",
+      "continent": "Asia",
+      "expected": " Tehran",
+      "got": " Tehran",
+      "correct": true
+    },
+    {
+      "country": "Iraq",
+      "continent": "Asia",
+      "expected": " Baghdad",
+      "got": " Baghdad",
+      "correct": true
+    },
+    {
+      "country": "Turkey",
+      "continent": "Asia",
+      "expected": " Ankara",
+      "got": " Ankara",
+      "correct": true
+    },
+    {
+      "country": "Pakistan",
+      "continent": "Asia",
+      "expected": " Islamabad",
+      "got": " Islamabad",
+      "correct": true
+    },
+    {
+      "country": "Canada",
+      "continent": "North America",
+      "expected": " Ottawa",
+      "got": " Ottawa",
+      "correct": true
+    },
+    {
+      "country": "Mexico",
+      "continent": "North America",
+      "expected": " Mexico City",
+      "got": " Mexico",
+      "correct": true
+    },
+    {
+      "country": "Cuba",
+      "continent": "North America",
+      "expected": " Havana",
+      "got": " Havana",
+      "correct": true
+    },
+    {
+      "country": "Brazil",
+      "continent": "South America",
+      "expected": " Bras\u00edlia",
+      "got": " Bras",
+      "correct": true
+    },
+    {
+      "country": "Argentina",
+      "continent": "South America",
+      "expected": " Buenos Aires",
+      "got": " Buenos",
+      "correct": true
+    },
+    {
+      "country": "Chile",
+      "continent": "South America",
+      "expected": " Santiago",
+      "got": " Santiago",
+      "correct": true
+    },
+    {
+      "country": "Peru",
+      "continent": "South America",
+      "expected": " Lima",
+      "got": " Lima",
+      "correct": true
+    },
+    {
+      "country": "Colombia",
+      "continent": "South America",
+      "expected": " Bogot\u00e1",
+      "got": " Bog",
+      "correct": true
+    },
+    {
+      "country": "Australia",
+      "continent": "Oceania",
+      "expected": " Canberra",
+      "got": " Canberra",
+      "correct": true
+    },
+    {
+      "country": "New Zealand",
+      "continent": "Oceania",
+      "expected": " Wellington",
+      "got": " Wellington",
+      "correct": true
+    }
+  ],
+  "template": "In {country}, the capital is"
+}

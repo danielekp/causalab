@@ -14,7 +14,7 @@ activation_manifold:
   subspace: pca_k32
   k_features: 32
   skip_decoding_eval: false
-  layers: [28]
+  layers: [18]
   token_positions: [last_token]
   visualization:
     figure_format: png

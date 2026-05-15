@@ -1,0 +1,12 @@
+name: country_borders
+max_new_tokens: 1
+intervention_metric: string_match
+n_train: 1000
+n_test: 50
+enumerate_all: true
+balanced: false
+# "all" = counterfactual resamples every input variable (task's generator).
+# A variable name (e.g. "country") = CF differs from original only in that one
+# variable. Required for locate pairwise mode. See ARCHITECTURE.md §5.
+resample_variable: all
+target_variable: country
