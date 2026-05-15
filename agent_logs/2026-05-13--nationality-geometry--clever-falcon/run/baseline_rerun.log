@@ -1,0 +1,11 @@
++ session-local code: /home/danielaush/Documents/what-is-a-feature/causalab/agent_logs/2026-05-13--nationality-geometry--clever-falcon/code (PYTHONPATH + Hydra searchpath)
+[2026-05-13 16:46:46,305][__main__][INFO] - === Step: baseline (baseline) ===
+[2026-05-13 16:46:51,947][__main__][INFO] - Running analysis: baseline | target_variable: country
+[2026-05-13 16:46:52,133][causalab.analyses.baseline.main][INFO] - Counterfactual change_country: distinguishes country from [] → 1.00 (64/64)
+[2026-05-13 16:46:52,150][causalab.analyses.baseline.main][INFO] - Counterfactual change_template: distinguishes country from [] → 0.00 (0/64)
+[2026-05-13 16:46:52,168][causalab.analyses.baseline.main][INFO] - Counterfactual random_counterfactual: distinguishes country from [] → 0.94 (60/64)
+[2026-05-13 16:46:52,186][causalab.runner.helpers][INFO] - Exhaustive enumeration: 160 unique input combinations (resample_variable=all)
+[2026-05-13 16:46:52,187][causalab.analyses.baseline.main][INFO] - Saved 160 rendered train samples.
+[2026-05-13 16:46:52,188][causalab.analyses.baseline.main][INFO] - Saved 160 rendered test samples.
+[2026-05-13 16:46:52,189][causalab.io.pipelines][INFO] - Loading model: meta-llama/Llama-3.1-8B (device=cpu)
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:00<00:00, 103.21it/s]

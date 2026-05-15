@@ -1,0 +1,24 @@
+Template 1: 'In {country}, the capital is'
+Loading meta-llama/Llama-3.1-8B...
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:00<00:00, 75.37it/s]
+Loaded in 1.9s
+  [5/40] correct=5 elapsed=102s eta=712s
+  [10/40] correct=10 elapsed=206s eta=619s
+  [15/40] correct=15 elapsed=310s eta=517s
+  [20/40] correct=20 elapsed=417s eta=417s
+  [25/40] correct=25 elapsed=523s eta=314s
+  [30/40] correct=30 elapsed=629s eta=210s
+  [35/40] correct=35 elapsed=740s eta=106s
+  [40/40] correct=40 elapsed=848s eta=0s
+
+Template 1 accuracy: 40/40 = 100.0%
+
+Per continent:
+  Africa         8/8 = 100%
+  Asia           10/10 = 100%
+  Europe         12/12 = 100%
+  North America  3/3 = 100%
+  Oceania        2/2 = 100%
+  South America  5/5 = 100%
+
+Saved template1_revalidation.json

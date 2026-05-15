@@ -1,0 +1,52 @@
+=== Validating meta-llama/Llama-3.1-8B on 40 examples ===
+Loading model... (this is the slow step on CPU)
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 4/4 [00:00<00:00, 126.44it/s]
+Loaded in 2.0s. Device: cpu
+
+Running 40 examples...
+  [8/40] correct=6 elapsed=146s eta=584s
+  [16/40] correct=12 elapsed=292s eta=438s
+  [24/40] correct=15 elapsed=450s eta=300s
+  [32/40] correct=21 elapsed=597s eta=149s
+  [40/40] correct=26 elapsed=740s eta=0s
+
+=== Results ===
+Overall: 26/40 = 65.0% (gen time 740s, 18.5s/prompt)
+
+Per template:
+  [0] 6/7 = 86% | 'The capital of {country} is'
+  [1] 2/13 = 15% | "{country}'s capital city is"
+  [2] 10/11 = 91% | "When you visit {country}, the capital city you'd arrive in i"
+  [3] 8/9 = 89% | 'The capital city of {country} is'
+
+Per continent:
+  Africa         3/6 = 50%
+  Asia           7/10 = 70%
+  Europe         8/11 = 73%
+  North America  4/5 = 80%
+  Oceania        1/2 = 50%
+  South America  3/6 = 50%
+
+Token alignment (first 3):
+  [OK ] 'The capital city of Thailand is' -> got=' Bangkok' expected=' Bangkok'
+          expected_ids=[60116] actual_ids=[60116]
+  [OK ] "When you visit Italy, the capital city you'd arrive in is" -> got=' Rome' expected=' Rome'
+          expected_ids=[22463] actual_ids=[22463]
+  [OK ] 'The capital city of Cuba is' -> got=' Havana' expected=' Havana'
+          expected_ids=[86975] actual_ids=[86975]
+
+First 12 misses:
+  tmpl1 Colombia       expected=' Bogotá'          got=' a'
+  tmpl1 Cuba           expected=' Havana'          got=' a'
+  tmpl1 Argentina      expected=' Buenos Aires'    got=' a'
+  tmpl1 China          expected=' Beijing'         got=' a'
+  tmpl0 Spain          expected=' Madrid'          got=' a'
+  tmpl3 France         expected=' Paris'           got=' a'
+  tmpl1 Japan          expected=' Tokyo'           got=' a'
+  tmpl1 Egypt          expected=' Cairo'           got=' a'
+  tmpl1 Morocco        expected=' Rabat'           got=' a'
+  tmpl1 Argentina      expected=' Buenos Aires'    got=' a'
+  tmpl2 Australia      expected=' Canberra'        got=' Sydney'
+  tmpl1 China          expected=' Beijing'         got=' a'
+
+Results saved to meta_llama_Llama_3.1_8B_results.json

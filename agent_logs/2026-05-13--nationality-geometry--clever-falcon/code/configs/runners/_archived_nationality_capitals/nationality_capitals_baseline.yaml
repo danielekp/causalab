@@ -1,0 +1,13 @@
+# @package _global_
+defaults:
+  - /base
+  - /task: nationality_capitals
+  - /model: llama31_8b
+  - /analysis/baseline
+  - _self_
+task:
+  enumerate_all: true
+  target_variable: country
+baseline:
+  visualization:
+    figure_format: png
