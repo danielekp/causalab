@@ -1,6 +1,12 @@
 name: country_borders
 max_new_tokens: 1
 intervention_metric: string_match
+# Default manifold-colouring map; resolved by analysis configs via
+# ${task.colormap} (subspace / *_manifold / path_steering). colormap2 is
+# the secondary map path_steering interpolates. Every task config must
+# define these — see causalab/configs/analysis/subspace.yaml.
+colormap: viridis
+colormap2: null
 n_train: 1000
 n_test: 50
 enumerate_all: true
