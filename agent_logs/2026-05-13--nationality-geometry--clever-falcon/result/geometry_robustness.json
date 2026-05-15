@@ -1,0 +1,52 @@
+{
+  "isomorphism_null": {
+    "n_countries": 30,
+    "observed_combined_r2": 1.6044,
+    "max_possible": 2.0,
+    "permutation": {
+      "n_perm": 2000,
+      "p_value": 0.0005,
+      "null_mean": 0.1432,
+      "null_p95": 0.3227,
+      "null_max": 0.5527
+    },
+    "bootstrap": {
+      "n_boot": 2000,
+      "ci95": [
+        1.2402,
+        1.8048
+      ],
+      "median": 1.6117
+    }
+  },
+  "residual_probe": {
+    "east_west": {
+      "raw": {
+        "acc": 0.833,
+        "chance": 0.533,
+        "lift": 0.3,
+        "n": 30
+      },
+      "residual": {
+        "acc": 0.533,
+        "chance": 0.533,
+        "lift": 0.0,
+        "n": 30
+      }
+    },
+    "linguistic_family": {
+      "raw": {
+        "acc": 0.5,
+        "chance": 0.357,
+        "lift": 0.143,
+        "n": 28
+      },
+      "residual": {
+        "acc": 0.321,
+        "chance": 0.357,
+        "lift": -0.036,
+        "n": 28
+      }
+    }
+  }
+}
