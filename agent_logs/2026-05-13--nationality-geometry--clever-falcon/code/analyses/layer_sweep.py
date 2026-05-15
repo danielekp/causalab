@@ -49,12 +49,15 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
-    cells = sorted(
-        (m, p) for p in args.sweep_root.glob("L*_*")
-        if (m := CELL_RE.match(p.name))
-        and (p / "subspace" / "pca_k32" / "country" / "features"
-             / "training_features.safetensors").exists()
-    )
+    cells = []
+    for p in sorted(args.sweep_root.glob("L*_*")):
+        m = CELL_RE.match(p.name)
+        if not m:
+            continue
+        root = p / "subspace" / "pca_k32" / "country"
+        if (root / "features" / "training_features.safetensors").exists():
+            cells.append((int(m.group(1)), m.group(2), root))
+    cells.sort(key=lambda t: (t[0], t[1]))
     if not cells:
         raise SystemExit(
             f"No completed sweep cells under {args.sweep_root}. Run "
@@ -63,9 +66,7 @@ def main() -> None:
 
     curves: dict[str, dict[int, float]] = {"relational": {}, "direct": {}}
     rows = []
-    for m, cell_path in cells:
-        layer, pos = int(m.group(1)), m.group(2)
-        root = cell_path / "subspace" / "pca_k32" / "country"
+    for layer, pos, root in cells:
         if pos == "last_token":
             cond = "relational"
             countries, C, n = gr.build_centroids(root)          # answer-country
