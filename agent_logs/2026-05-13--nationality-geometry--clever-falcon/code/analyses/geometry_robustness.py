@@ -98,10 +98,21 @@ def _combined_r2(P2: np.ndarray, geo: np.ndarray, theta: float) -> float:
     return r2x + r2y
 
 
-def _best_combined_r2(P2: np.ndarray, geo: np.ndarray) -> float:
+def best_rotation(P2: np.ndarray, geo: np.ndarray) -> tuple[float, float]:
+    """Best in-plane rotation of the 2-D PCA plane onto (lat, lon).
+
+    Returns ``(theta_radians, combined_r2)`` where combined_r2 is
+    R^2(geo -> rot_x) + R^2(geo -> rot_y) at the optimum (max 2.0). Public so
+    callers that also need the angle (e.g. to draw the rotated map) don't
+    re-implement the optimisation.
+    """
     res = minimize(lambda t: -_combined_r2(P2, geo, t[0]),
                    x0=[0.0], method="Nelder-Mead")
-    return float(-res.fun)
+    return float(res.x[0]), float(-res.fun)
+
+
+def _best_combined_r2(P2: np.ndarray, geo: np.ndarray) -> float:
+    return best_rotation(P2, geo)[1]
 
 
 def geographic_isomorphism_null(valid_countries, centroids_v,
