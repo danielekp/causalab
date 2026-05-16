@@ -52,6 +52,7 @@ from causalab.tasks.country_borders import (  # noqa: E402
     COUNTRY_FIRST_TOKEN_OF,
     NEIGHBOR_OF,
 )
+from causalab.tasks.country_borders.causal_models import causal_model  # noqa: E402
 from causalab.tasks.country_borders.templates import TEMPLATES  # noqa: E402
 
 MODEL = "meta-llama/Llama-3.1-8B"
@@ -64,16 +65,23 @@ POS = "last_token"                   # the relational answer position (§6.3)
 # answer country (NEIGHBOR_OF[(country,direction)][0]) — identical labelling
 # to Stage A / §6.3 build_centroids.
 # --------------------------------------------------------------------------- #
-def answer_buckets() -> dict[str, list[dict]]:
-    buckets: dict[str, list[dict]] = {c: [] for c in COUNTRIES}
+def answer_buckets() -> dict[str, list]:
+    """answer-country -> list of CausalTrace inputs. Built via the task's own
+    sample_input() scaffold + .intervene() (the pattern counterfactuals.py
+    uses) so `template` is the real template *string* and the framework can
+    tokenize / build token positions from each input."""
+    scaffold = causal_model.sample_input()
+    buckets: dict[str, list] = {c: [] for c in COUNTRIES}
     for (country, direction), neigh in NEIGHBOR_OF.items():
         ans = neigh[0]
         if ans not in buckets:
             continue
-        for ti, _ in enumerate(TEMPLATES):
-            buckets[ans].append(
-                {"country": country, "direction": direction, "template": ti}
-            )
+        for tmpl in TEMPLATES:
+            inp = (scaffold.copy()
+                   .intervene("country", country)
+                   .intervene("direction", direction)
+                   .intervene("template", tmpl))
+            buckets[ans].append(inp)
     return buckets
 
 
