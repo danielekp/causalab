@@ -174,9 +174,19 @@ def main() -> None:
     ap.add_argument("--smoke", action="store_true",
                     help="tiny GPU run (2 pairs/triple, alphas {0,1}) to "
                          "confirm the scores format before the full sweep")
+    ap.add_argument("--featurizer", choices=["subspace", "identity"],
+                    default="subspace",
+                    help="'subspace' = interpolate only the §6.3 PCA-32 slice; "
+                         "'identity' = interpolate the FULL residual at "
+                         "(layer,last_token) — the strongest interchange, used "
+                         "as the A->C efficacy anchor")
+    ap.add_argument("--anchor", action="store_true",
+                    help="endpoint-only efficacy test: alphas {0,1} (does a "
+                         "full interchange even flip A->C?). Pair with "
+                         "--featurizer identity")
     args = ap.parse_args()
 
-    alphas = ([0.0, 1.0] if args.smoke
+    alphas = ([0.0, 1.0] if (args.smoke or args.anchor)
               else [float(x) for x in args.alphas.split(",")])
     max_pairs = 2 if args.smoke else args.max_pairs
     rng = np.random.default_rng(args.seed)
@@ -202,12 +212,21 @@ def main() -> None:
     interchange_target = next(iter(targets.values()))
     token_pos = tp_list[0]
 
-    from causalab.analyses.subspace.loading import load_subspace_onto_target
-    load_subspace_onto_target(
-        interchange_target, str(args.subspace_root), "pca", args.k_features)
+    if args.featurizer == "subspace":
+        from causalab.analyses.subspace.loading import load_subspace_onto_target
+        load_subspace_onto_target(
+            interchange_target, str(args.subspace_root), "pca",
+            args.k_features)
+        kdesc = f"k={args.k_features}"
+    else:
+        # leave the unit's default identity featurizer -> interpolate the
+        # FULL residual (no low-energy 32-d bottleneck). alpha=1 transplants
+        # the entire source last_token activation: the strongest possible
+        # A->C interchange, used as the efficacy anchor.
+        kdesc = "full-residual"
     feat = interchange_target.flatten()[0].featurizer
     print(f"featurizer: {type(feat).__name__}  layer={args.layer} "
-          f"pos={token_pos.id}  k={args.k_features}")
+          f"pos={token_pos.id}  {kdesc}")
 
     # ----- build per-triple counterfactual datasets ----------------------- #
     def pairs_for(a_country: str, c_country: str) -> list[dict]:
