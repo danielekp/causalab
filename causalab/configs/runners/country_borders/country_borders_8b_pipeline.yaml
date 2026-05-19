@@ -22,11 +22,12 @@ defaults:
 - /analysis/baseline
 - /analysis/subspace
 - /analysis/activation_manifold
+- /analysis/output_manifold
 - /analysis/path_steering
-# output_manifold omitted: belief-space paths / dual_manifold are
-# log-and-skip in path_steering when absent; not on the geodesic-vs-linear
-# critical path. Add back (intrinsic_dim 2) if belief-space steering wanted.
-# - /analysis/output_manifold
+# output_manifold IS required: path_steering's `isometry` criterion (and
+# belief-space paths / dual_manifold) skip silently without it. The
+# geographic re-param (country -> [lat, lon] = 2 params) unlocks it under
+# spline at intrinsic_dim 2, the same fix that unlocked activation_manifold.
 # - /analysis/pullback
 - _self_
 
@@ -50,6 +51,14 @@ activation_manifold:
   # params → intrinsic_dim 2. `parameter` mode uses that geographic
   # embedding as the intrinsic coordinates (mirrors graph_walk), so the
   # fitted manifold is the Europe map and geodesics are geographic paths.
+  method: spline
+  intrinsic_mode: parameter
+  intrinsic_dim: 2
+
+output_manifold:
+  # Manifold over the 30-way belief (per-class output distributions).
+  # Geographic re-param makes spline valid here too (country -> 2 params);
+  # required by path_steering's isometry / belief-space / dual_manifold.
   method: spline
   intrinsic_mode: parameter
   intrinsic_dim: 2
