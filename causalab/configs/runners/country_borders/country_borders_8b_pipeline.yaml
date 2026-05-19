@@ -21,8 +21,13 @@ defaults:
 - /analysis/baseline
 - /analysis/subspace
 - /analysis/activation_manifold
-- /analysis/output_manifold
 - /analysis/path_steering
+# output_manifold omitted on purpose: it uses the same spline machinery
+# (locked to intrinsic_dim==#causal_params==1 for categorical `country`)
+# and is NOT on the path_steering critical path — path_steering logs-and-
+# skips belief-space paths / dual_manifold when its artifacts are absent.
+# Add back as `method: flow` later if belief-space steering is wanted.
+# - /analysis/output_manifold
 # - /analysis/pullback
 - _self_
 
@@ -42,13 +47,13 @@ subspace:
 activation_manifold:
   layers: [28]
   token_positions: [last_token]
-  # Data-driven manifold from centroid PCA (NOT graph_walk's canonical-θ
-  # `parameter` mode — country has no analytic coordinate). intrinsic_dim 2
-  # = the lat/lon plane established in §6.2 (PC0 R²0.77, PC1 R²0.83).
-  intrinsic_mode: pca
-  intrinsic_dim: 2
-
-output_manifold:
+  # `flow` (normalizing-flow manifold), NOT `spline`: spline is locked to
+  # intrinsic_dim == #causal_params, and `country` is a single categorical
+  # parameter (no metric) → spline would force a meaningless 1-D ordering.
+  # ManifoldFlow only needs 1 ≤ dim < ambient, so it fits a data-driven
+  # 2-D manifold through the §6.2 PCA-32 centroids (PC0≈lat, PC1≈lon).
+  # NB: no shipped runner exercises `flow` — the first GPU run validates it.
+  method: flow
   intrinsic_mode: pca
   intrinsic_dim: 2
 
