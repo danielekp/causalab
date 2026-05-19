@@ -21,6 +21,7 @@ from .config import (
     DIRECTION_PHRASE,
     NEIGHBOR_OF,
     COUNTRY_FIRST_TOKEN_OF,
+    LAT_LON_OF,
     VALID_CELLS,
     primary_neighbor,
 )
@@ -69,12 +70,25 @@ mechanisms = {
     ),
 }
 
-# Country-index embedding for downstream PCA/manifold tools that want a
-# scalar per-country handle.
-_country_to_index = {c: i for i, c in enumerate(COUNTRIES)}
+# Geographic parameterization of the answer-country variable: country ->
+# [lat, lon] of its capital. This is the metric causal parameter that makes
+# the framework's manifold/path_steering machinery applicable — exactly
+# graph_walk's `node_coordinates` pattern (identity embedding of a numeric
+# coordinate vector). A length-2 embedding yields params `country_0`,
+# `country_1` (spline.builders.extract_parameters_from_dataset), so
+# activation_manifold can fit a 2-D manifold (intrinsic_dim=2,
+# intrinsic_mode=parameter) and geodesics are literally geographic — the
+# substrate for the "does B appear at the midpoint between far A and C?"
+# test. The §6.2-§6.6 geometry results do not consume this embedding (they
+# use external capital coords + activation PCA), so they are unaffected.
+def _embed_country_latlon(c: str) -> list[float]:
+    lat, lon = LAT_LON_OF[c]
+    return [float(lat), float(lon)]
+
+
 _direction_to_index = {d: i for i, d in enumerate(DIRECTIONS)}
 embeddings = {
-    "country":   lambda v, _m=_country_to_index:   [float(_m[v])],
+    "country":   _embed_country_latlon,
     "direction": lambda v, _m=_direction_to_index: [float(_m[v])],
 }
 
