@@ -33,6 +33,10 @@ near-collinear, far triples Stage A surfaced) — no hand-coding.
     uv run python .../chord_steering.py --smoke
     # 3. full run:
     uv run python .../chord_steering.py
+    # 4. layer-swept efficacy anchor — where (if anywhere) a full last_token
+    #    transplant flips A->C (branch-2 follow-up to the L28 anchor):
+    uv run python .../chord_steering.py --featurizer identity --anchor \
+        --layers 20,24,28,30,31
 """
 from __future__ import annotations
 
@@ -160,6 +164,12 @@ def main() -> None:
                     default=SESSION_DIR / "result" / "chord_betweenness.json")
     ap.add_argument("--out", type=Path, default=SESSION_DIR / "result")
     ap.add_argument("--layer", type=int, default=28)
+    ap.add_argument("--layers", type=str, default="",
+                    help="comma-separated layers to sweep (e.g. "
+                         "'20,24,28,30,31'); overrides --layer. Datasets are "
+                         "built ONCE so layer is the only varying factor. "
+                         "Output JSON becomes {model,layers,runs:[per-layer]}; "
+                         "single-layer keeps the original flat schema.")
     ap.add_argument("--k-features", type=int, default=32)
     ap.add_argument("--n-triples", type=int, default=5)
     ap.add_argument("--max-pairs", type=int, default=24,
@@ -191,6 +201,15 @@ def main() -> None:
     max_pairs = 2 if args.smoke else args.max_pairs
     rng = np.random.default_rng(args.seed)
 
+    layer_list = ([int(x) for x in args.layers.split(",") if x.strip()]
+                  if args.layers.strip() else [args.layer])
+    multi = len(layer_list) > 1
+    if multi and args.featurizer == "subspace":
+        print("WARNING: --featurizer subspace with multiple layers — the PCA "
+              "subspace was fit at one layer (REPORT §6.3, L28); loading it "
+              "onto other layers is not meaningful. Use --featurizer identity "
+              "for the layer-swept efficacy anchor.", file=sys.stderr)
+
     triples = load_triples(args.triples_json, args.n_triples)
     buckets = answer_buckets()
 
@@ -207,28 +226,10 @@ def main() -> None:
 
     tok_ids = country_token_ids(pipeline.tokenizer)
 
-    targets, tp_list = build_targets_for_grid(
-        pipeline, task, [args.layer], [POS])
-    interchange_target = next(iter(targets.values()))
-    token_pos = tp_list[0]
-
-    if args.featurizer == "subspace":
-        from causalab.analyses.subspace.loading import load_subspace_onto_target
-        load_subspace_onto_target(
-            interchange_target, str(args.subspace_root), "pca",
-            args.k_features)
-        kdesc = f"k={args.k_features}"
-    else:
-        # leave the unit's default identity featurizer -> interpolate the
-        # FULL residual (no low-energy 32-d bottleneck). alpha=1 transplants
-        # the entire source last_token activation: the strongest possible
-        # A->C interchange, used as the efficacy anchor.
-        kdesc = "full-residual"
-    feat = interchange_target.flatten()[0].featurizer
-    print(f"featurizer: {type(feat).__name__}  layer={args.layer} "
-          f"pos={token_pos.id}  {kdesc}")
-
-    # ----- build per-triple counterfactual datasets ----------------------- #
+    # ----- build per-triple counterfactual datasets ONCE ------------------ #
+    # Built before the layer loop so the datasets (and their rng-shuffled
+    # pairing) are identical across every swept layer: the layer is then the
+    # only varying factor in the efficacy anchor.
     def pairs_for(a_country: str, c_country: str) -> list[dict]:
         ba = list(buckets.get(a_country, []))
         bc = list(buckets.get(c_country, []))
@@ -249,7 +250,32 @@ def main() -> None:
         print(f"  {A:>12s} -> {B:>12s} -> {C:<12s} "
               f"t_geo={r['t_geo']:.2f}  pairs={len(ds)}")
 
+    def build_target_for(layer: int):
+        """Fresh interchange target + token-position for one layer; loads the
+        PCA subspace or leaves the default identity featurizer per
+        --featurizer. Rebuilt per layer; pipeline weights load only once."""
+        tg, tp = build_targets_for_grid(pipeline, task, [layer], [POS])
+        itarget = next(iter(tg.values()))
+        if args.featurizer == "subspace":
+            from causalab.analyses.subspace.loading import (
+                load_subspace_onto_target,
+            )
+            load_subspace_onto_target(
+                itarget, str(args.subspace_root), "pca", args.k_features)
+            desc = f"k={args.k_features}"
+        else:
+            # leave the unit's default identity featurizer -> interpolate the
+            # FULL residual (no low-energy 32-d bottleneck). alpha=1
+            # transplants the entire source last_token activation: the
+            # strongest possible A->C interchange — the efficacy anchor.
+            desc = "full-residual"
+        fobj = itarget.flatten()[0].featurizer
+        print(f"featurizer: {type(fobj).__name__}  layer={layer} "
+              f"pos={tp[0].id}  {desc}")
+        return itarget
+
     if args.dry_run:
+        build_target_for(layer_list[0])
         ok = all(p["n_pairs"] > 0 for p in plan) and len(tok_ids) >= 25
         print(f"\n[dry-run] task/targets/featurizer/dataset/readout wired. "
               f"country readout tokens={len(tok_ids)}  "
@@ -257,7 +283,7 @@ def main() -> None:
         print("[dry-run] no GPU used. If YES, run --smoke next.")
         return
 
-    # ----- the interpolation sweep ---------------------------------------- #
+    # ----- the interpolation sweep (per layer) ---------------------------- #
     from causalab.neural.activations.interpolate import (
         run_interpolation_interventions,
     )
@@ -265,53 +291,75 @@ def main() -> None:
     def linear_interp(f_base, f_src, alpha):
         return (1.0 - alpha) * f_base + alpha * f_src
 
-    results = []
-    for p in plan:
-        if not p["ds"]:
-            continue
-        A, B, C = p["A"], p["B"], p["C"]
-        curve = {"A": A, "B": B, "C": C, "t_geo": p["t_geo"],
-                 "n_pairs": p["n_pairs"], "alphas": alphas,
-                 "P_A": [], "P_B": [], "P_C": []}
-        for a in alphas:
-            out = run_interpolation_interventions(
-                pipeline, p["ds"], interchange_target,
-                fn=linear_interp, params={"alpha": a},
-                batch_size=args.batch_size, output_scores=True,
+    def sweep_one_layer(layer: int) -> dict:
+        if multi:
+            print(f"\n=== layer {layer} ===")
+        interchange_target = build_target_for(layer)
+        results = []
+        for p in plan:
+            if not p["ds"]:
+                continue
+            A, B, C = p["A"], p["B"], p["C"]
+            curve = {"A": A, "B": B, "C": C, "t_geo": p["t_geo"],
+                     "n_pairs": p["n_pairs"], "alphas": alphas,
+                     "P_A": [], "P_B": [], "P_C": []}
+            for a in alphas:
+                out = run_interpolation_interventions(
+                    pipeline, p["ds"], interchange_target,
+                    fn=linear_interp, params={"alpha": a},
+                    batch_size=args.batch_size, output_scores=True,
+                )
+                pr = country_probs(out["scores"], tok_ids)
+                curve["P_A"].append(float(np.mean(pr[A])) if A in pr else None)
+                curve["P_B"].append(float(np.mean(pr[B])) if B in pr else None)
+                curve["P_C"].append(float(np.mean(pr[C])) if C in pr else None)
+            pb = np.array(curve["P_B"], float)
+            interior = pb[1:-1]
+            a_star = (alphas[1 + int(np.argmax(interior))]
+                      if interior.size else None)
+            curve["argmax_alpha_B"] = a_star
+            curve["B_interior_peak"] = bool(
+                interior.size and interior.max() >= pb[0]
+                and interior.max() >= pb[-1]
             )
-            pr = country_probs(out["scores"], tok_ids)
-            curve["P_A"].append(float(np.mean(pr[A])) if A in pr else None)
-            curve["P_B"].append(float(np.mean(pr[B])) if B in pr else None)
-            curve["P_C"].append(float(np.mean(pr[C])) if C in pr else None)
-        pb = np.array(curve["P_B"], float)
-        interior = pb[1:-1]
-        a_star = alphas[1 + int(np.argmax(interior))] if interior.size else None
-        curve["argmax_alpha_B"] = a_star
-        curve["B_interior_peak"] = bool(
-            interior.size and interior.max() >= pb[0] and interior.max() >= pb[-1]
-        )
-        results.append(curve)
-        print(f"[{A}->{B}->{C}] t_geo={p['t_geo']:.2f} "
-              f"argmax_a P(B)={a_star}  interior_peak={curve['B_interior_peak']} "
-              f"P_B={['%.2f' % x for x in curve['P_B']]}")
-        if args.smoke:
-            print("[smoke] scores format OK — safe to run the full sweep.")
-            break
+            results.append(curve)
+            print(f"[{A}->{B}->{C}] t_geo={p['t_geo']:.2f} "
+                  f"argmax_a P(B)={a_star}  "
+                  f"interior_peak={curve['B_interior_peak']} "
+                  f"P_B={['%.2f' % x for x in curve['P_B']]}")
+            if args.smoke:
+                print("[smoke] scores format OK — safe to run the full sweep.")
+                break
 
-    # cross-triple test: does the B-peak location track geography?
-    pts = [(c["t_geo"], c["argmax_alpha_B"]) for c in results
-           if c["argmax_alpha_B"] is not None]
-    summary = {"layer": args.layer, "model": args.model, "alphas": alphas,
-               "triples": results}
-    if len(pts) >= 3:
-        tg, aa = np.array([x[0] for x in pts]), np.array([x[1] for x in pts])
-        summary["corr_tgeo_argmaxB"] = round(
-            float(np.corrcoef(tg, aa)[0, 1]), 3)
-        summary["n_interior_peaks"] = int(
-            sum(c["B_interior_peak"] for c in results))
-        print(f"\ncorr(t_geo, argmax_a P(B)) = "
-              f"{summary['corr_tgeo_argmaxB']}  "
-              f"interior peaks {summary['n_interior_peaks']}/{len(results)}")
+        # cross-triple test: does the B-peak location track geography?
+        pts = [(c["t_geo"], c["argmax_alpha_B"]) for c in results
+               if c["argmax_alpha_B"] is not None]
+        summ = {"layer": layer, "alphas": alphas, "triples": results}
+        if len(pts) >= 3:
+            tg = np.array([x[0] for x in pts])
+            aa = np.array([x[1] for x in pts])
+            summ["corr_tgeo_argmaxB"] = round(
+                float(np.corrcoef(tg, aa)[0, 1]), 3)
+            summ["n_interior_peaks"] = int(
+                sum(c["B_interior_peak"] for c in results))
+            print(f"\n[layer {layer}] corr(t_geo, argmax_a P(B)) = "
+                  f"{summ['corr_tgeo_argmaxB']}  "
+                  f"interior peaks {summ['n_interior_peaks']}/{len(results)}")
+        return summ
+
+    runs = [sweep_one_layer(L) for L in layer_list]
+
+    if multi:
+        summary = {"model": args.model, "layers": layer_list,
+                   "alphas": alphas, "runs": runs}
+    else:
+        # single-layer: keep the original flat schema so existing
+        # chord_steering.json consumers / prior analyses still parse.
+        summary = {"layer": layer_list[0], "model": args.model,
+                   "alphas": alphas, "triples": runs[0]["triples"]}
+        for k in ("corr_tgeo_argmaxB", "n_interior_peaks"):
+            if k in runs[0]:
+                summary[k] = runs[0][k]
 
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "chord_steering.json").write_text(json.dumps(summary, indent=2))
@@ -321,24 +369,34 @@ def main() -> None:
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        n = len(results)
-        fig, axes = plt.subplots(1, max(n, 1), figsize=(4.2 * max(n, 1), 4),
-                                 squeeze=False)
-        for ax, c in zip(axes[0], results):
-            ax.plot(alphas, c["P_A"], "o-", label=f"P({c['A']})", color="tab:red")
-            ax.plot(alphas, c["P_B"], "s-", label=f"P({c['B']})",
-                    color="tab:green", lw=2)
-            ax.plot(alphas, c["P_C"], "^-", label=f"P({c['C']})",
-                    color="tab:blue")
-            ax.set(xlabel="alpha (chord A->C)", ylabel="P(country)",
-                   title=f"{c['A']}->{c['B']}->{c['C']} (t_geo={c['t_geo']:.2f})")
-            ax.grid(alpha=0.3)
-            ax.legend(fontsize=8)
-        fig.tight_layout()
         (args.out / "figures").mkdir(parents=True, exist_ok=True)
-        fig.savefig(args.out / "figures" / "chord_steering.png", dpi=150)
+        for run in runs:
+            res = run["triples"]
+            n = len(res)
+            fig, axes = plt.subplots(1, max(n, 1),
+                                     figsize=(4.2 * max(n, 1), 4),
+                                     squeeze=False)
+            for ax, c in zip(axes[0], res):
+                ax.plot(alphas, c["P_A"], "o-", label=f"P({c['A']})",
+                        color="tab:red")
+                ax.plot(alphas, c["P_B"], "s-", label=f"P({c['B']})",
+                        color="tab:green", lw=2)
+                ax.plot(alphas, c["P_C"], "^-", label=f"P({c['C']})",
+                        color="tab:blue")
+                ax.set(xlabel="alpha (chord A->C)", ylabel="P(country)",
+                       title=f"{c['A']}->{c['B']}->{c['C']} "
+                             f"(t_geo={c['t_geo']:.2f})")
+                ax.grid(alpha=0.3)
+                ax.legend(fontsize=8)
+            if multi:
+                fig.suptitle(f"layer {run['layer']}")
+            fig.tight_layout()
+            fname = (f"chord_steering_L{run['layer']}.png" if multi
+                     else "chord_steering.png")
+            fig.savefig(args.out / "figures" / fname, dpi=150)
+            plt.close(fig)
         print(f"\nwrote {args.out/'chord_steering.json'} and "
-              f"figures/chord_steering.png")
+              f"figures/chord_steering*.png")
     except Exception as e:
         print(f"\n(figure skipped: {e}); wrote {args.out/'chord_steering.json'}")
 
