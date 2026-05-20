@@ -1,0 +1,79 @@
+# @package _global_
+#
+# country_borders — geometry + GEOGRAPHIC manifold-steering pipeline.
+#
+# Runs the framework's actual steering method (path_steering: geodesic vs
+# linear) through a manifold parameterized by capital (lat, lon). The
+# `country` causal variable now embeds to [lat, lon] (causal_models.py),
+# mirroring graph_walk's `node_coordinates` — so spline is valid
+# (intrinsic_dim==#params==2) and geodesics are literally geographic.
+#
+# This is the §10 re-parameterization that makes the "does B appear at the
+# midpoint between far countries A and C?" hypothesis directly testable —
+# the experiment §6.6 (linear, bounded-negative) and §6.7 (framework
+# structurally inapplicable to the categorical task) motivated.
+#
+#   scripts/run_exp.sh country_borders/country_borders_8b_pipeline
+#
+defaults:
+- /base
+- /task: country_borders
+- /model: llama31_8b
+- /analysis/baseline
+- /analysis/subspace
+- /analysis/activation_manifold
+- /analysis/output_manifold
+- /analysis/path_steering
+# output_manifold IS required: path_steering's `isometry` criterion (and
+# belief-space paths / dual_manifold) skip silently without it. The
+# geographic re-param (country -> [lat, lon] = 2 params) unlocks it under
+# spline at intrinsic_dim 2, the same fix that unlocked activation_manifold.
+# - /analysis/pullback
+- _self_
+
+task:
+  # per-answer-country centroids, geographically parameterized
+  target_variable: country
+
+locate:
+  layers: [28]
+
+subspace:
+  # PCA-32 at L28 — the exact subspace REPORT §6.3/§6.6 used (continuity)
+  layers: [28]
+  k_features: 32
+  token_positions: [last_token]
+
+activation_manifold:
+  layers: [28]
+  token_positions: [last_token]
+  # spline (TPS) is now valid: `country` embeds to [lat, lon] → 2 causal
+  # params → intrinsic_dim 2. `parameter` mode uses that geographic
+  # embedding as the intrinsic coordinates (mirrors graph_walk), so the
+  # fitted manifold is the Europe map and geodesics are geographic paths.
+  method: spline
+  intrinsic_mode: parameter
+  intrinsic_dim: 2
+
+output_manifold:
+  # Manifold over the 30-way belief (per-class output distributions).
+  # Geographic re-param makes spline valid here too (country -> 2 params);
+  # required by path_steering's isometry / belief-space / dual_manifold.
+  method: spline
+  intrinsic_mode: parameter
+  intrinsic_dim: 2
+
+path_steering:
+  # geometric = geodesic along the geographic manifold; linear = §6.6 baseline.
+  path_modes: [geometric, linear]
+  # First run: isometry only — lowest-dependency criterion and the headline
+  # "is the geodesic metric better-conditioned than linear on the geographic
+  # manifold?" Expand once confirmed on RunPod:
+  #   eval_criteria: [isometry, coherence, distance_from_behavior_manifold]
+  eval_criteria: [isometry]
+  num_steps_along_path: 50
+  # For the explicit "B at the midpoint" visualization, set far Stage-A
+  # pairs (disables aggregate stats — see path_steering.yaml):
+  #   selected_pairs: [["Spain", "Russia"], ["Portugal", "Russia"]]
+  isometry:
+    n_interior_per_pair: 4
