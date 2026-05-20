@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: llama31_8b
+  - /analysis/locate
+  - _self_
+task:
+  enumerate_all: true # Enumerate all examples in the training set, test = []
+  intervention_metric: string_match
+  resample_variable: country
+  target_variable: country
+
+locate:
+  method: interchange
+  mode: pairwise
+  layers: [0, 8, 16, 20, 24, 28]
+  n_steer: 16
+  visualization:
+    figure_format: png
