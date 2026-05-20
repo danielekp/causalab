@@ -1,8 +1,0 @@
-{
-  "pearson_r": 0.17374549756974134,
-  "n_pairs": 1559475,
-  "n_centroids": 30,
-  "n_interior_per_pair": 4,
-  "n_vertices": 1770,
-  "n_excluded_same_geodesic": 6090
-}
