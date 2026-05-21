@@ -212,21 +212,6 @@ class LMPipeline(Pipeline):
                         self.model.config._attn_implementation = "eager"
                 if hasattr(self.model.config, "use_cache"):
                     self.model.config.use_cache = False
-                # Multimodal-capable configs (Gemma-3/4, Llama-3.2-vision, etc.)
-                # nest text-model fields under config.text_config. The framework
-                # reads hidden_size / num_hidden_layers / num_attention_heads /
-                # vocab_size directly off config; promote them to the top level
-                # so downstream call sites don't need per-arch branching.
-                _text_cfg = getattr(self.model.config, "text_config", None)
-                if _text_cfg is not None:
-                    for _attr in (
-                        "hidden_size",
-                        "num_hidden_layers",
-                        "num_attention_heads",
-                        "vocab_size",
-                    ):
-                        if not hasattr(self.model.config, _attr) and hasattr(_text_cfg, _attr):
-                            setattr(self.model.config, _attr, getattr(_text_cfg, _attr))
                 # We always greedy-decode (do_sample=False); strip sampling-only
                 # fields from generation_config so transformers doesn't warn that
                 # temperature/top_p are being ignored on every generate() call.
