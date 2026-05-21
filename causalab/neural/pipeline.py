@@ -201,8 +201,22 @@ class LMPipeline(Pipeline):
             )
             if device_map is not None:
                 pretrained_kwargs["device_map"] = device_map
+            # `model_class` escape hatch: some HF model_types (notably
+            # multimodal-by-default Gemma 3 4B/12B/27B) route via
+            # AutoModelForCausalLM to a ConditionalGeneration wrapper whose
+            # config nests text fields under `.text_config` and whose decoder
+            # lives at `.language_model.model.layers.<n>` — both break the
+            # framework's flat config access and pyvene's `model.layers.<n>`
+            # hook path. Setting `model_class: Gemma3ForCausalLM` in the
+            # model YAML loads the text-only branch directly.
+            model_class_name = self._init_extra_kwargs.get("model_class")
+            if model_class_name is not None:
+                import transformers as _hf
+                ModelCls = getattr(_hf, model_class_name)
+            else:
+                ModelCls = AutoModelForCausalLM
             if self.load_weights:
-                self.model = AutoModelForCausalLM.from_pretrained(  # type: ignore[call-arg]
+                self.model = ModelCls.from_pretrained(  # type: ignore[call-arg]
                     self.model_or_name, **pretrained_kwargs
                 )
                 if device_map is None:
@@ -232,6 +246,14 @@ class LMPipeline(Pipeline):
                     self.model_or_name,
                     token=hf_token,
                 )
+                # Multimodal wrappers (e.g. Gemma3Config) nest text fields
+                # under .text_config. The framework only reads hidden_size /
+                # num_hidden_layers / num_attention_heads here, so unwrap
+                # to the text-only sub-config when present.
+                if hasattr(hf_config, "text_config") and not hasattr(
+                    hf_config, "hidden_size"
+                ):
+                    hf_config = hf_config.text_config
                 self.model = SimpleNamespace(config=hf_config)
         else:
             # Pre-loaded model: move to device, and only convert dtype if explicit

@@ -341,6 +341,8 @@ def main(cfg: DictConfig) -> dict[str, Any]:
         device=cfg.model.device,
         dtype=cfg.model.get("dtype"),
         eager_attn=cfg.model.get("eager_attn"),
+        use_chat_template=cfg.model.get("use_chat_template", False),
+        model_class=cfg.model.get("model_class"),
     )
 
     # Optionally load a source pipeline for cross-model patching.
@@ -360,6 +362,8 @@ def main(cfg: DictConfig) -> dict[str, Any]:
             device=cfg.model.device,
             dtype=cfg.model.get("dtype"),
             eager_attn=cfg.model.get("eager_attn"),
+            use_chat_template=cfg.model.get("use_chat_template", False),
+            model_class=cfg.model.get("model_class"),
         )
 
     logger.info("Locate scan over variables: %s", target_variables)

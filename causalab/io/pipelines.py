@@ -34,6 +34,8 @@ def load_pipeline(
     device: str | None = None,
     dtype: str | None = None,
     eager_attn: bool | None = None,
+    use_chat_template: bool = False,
+    model_class: str | None = None,
 ):
     """Load an ``LMPipeline`` from explicit parameters."""
     from causalab.neural.pipeline import LMPipeline, resolve_device
@@ -60,8 +62,15 @@ def load_pipeline(
         model_kwargs["dtype"] = DTYPE_MAP.get(dtype, torch.bfloat16)
     if eager_attn is False:
         model_kwargs["eager_attn"] = False
+    if model_class is not None:
+        model_kwargs["model_class"] = model_class
 
-    pipeline = LMPipeline(model_name, max_new_tokens=max_new_tokens, **model_kwargs)
+    pipeline = LMPipeline(
+        model_name,
+        max_new_tokens=max_new_tokens,
+        use_chat_template=use_chat_template,
+        **model_kwargs,
+    )
 
     if task.validate is not None:
         task.validate(pipeline)

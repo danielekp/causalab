@@ -1,0 +1,15 @@
+id: gemma3_4b_pt
+name: google/gemma-3-4b-pt
+device: auto
+dtype: bfloat16
+eager_attn: false
+# PT (pre-trained, non-instruction-tuned): completes the task's "Q: ... A:"
+# templates as a base LM; no chat-template wrapping needed.
+use_chat_template: false
+# Gemma 3 4B/12B/27B still ship as multimodal wrappers
+# (Gemma3ForConditionalGeneration) at the auto-class level even for PT.
+# Force the text-only Gemma3ForCausalLM so config is flat (Gemma3TextConfig)
+# and pyvene's `model.layers.<n>` path resolves correctly.
+model_class: Gemma3ForCausalLM
+slurm:
+  gpus: 1
