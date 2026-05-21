@@ -14,7 +14,9 @@ activation_manifold:
   subspace: pca_k32
   k_features: 32
   skip_decoding_eval: false
-  layers: [28]
+  # Set this to the layer that wins the subspace combined-R^2 curve above.
+  # Default placeholder = 48 (mid-late, analog of L24/32 on Llama-8B).
+  layers: [60]
   token_positions: [last_token]
   visualization:
     figure_format: png

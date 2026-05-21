@@ -2,7 +2,7 @@
 defaults:
   - /base
   - /task: country_borders
-  - /model: gemma3_27b_pt
+  - /model: gemma3_4b_pt
   - /analysis/locate
   - _self_
 task:
@@ -14,7 +14,7 @@ task:
 locate:
   method: interchange
   mode: centroid # <-- changing to centroid mode
-  layers: [0, 8, 16, 20, 24, 28]
+  layers: [0, 6, 12, 18, 24, 30]
   n_steer: 16
   visualization:
     figure_format: png

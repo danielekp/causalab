@@ -2,7 +2,7 @@
 defaults:
   - /base
   - /task: country_borders
-  - /model: gemma3_27b_pt
+  - /model: gemma3_4b_pt
   - /analysis/subspace
   - _self_
 task:
@@ -11,7 +11,10 @@ task:
 
 subspace:
   method: pca
-  layers: [28]
+  # Wider sweep on Gemma 3 27B (62 layers). The combined-R^2 vs layer curve
+  # below pinpoints the peak; downstream activation_manifold/path_steering
+  # cells lock onto whichever layer wins.
+  layers: [33]
   k_features: 32
   token_positions: [last_token]
   visualization:
