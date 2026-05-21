@@ -196,6 +196,7 @@ def main(cfg: DictConfig) -> dict[str, Any]:
         device=cfg.model.device,
         dtype=cfg.model.get("dtype"),
         eager_attn=cfg.model.get("eager_attn"),
+        use_chat_template=cfg.model.get("use_chat_template", False),
     )
     score_token_ids, n_score_tokens = get_output_token_ids(task, pipeline)
     n_classes = (
