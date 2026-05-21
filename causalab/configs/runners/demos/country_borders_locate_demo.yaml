@@ -2,18 +2,18 @@
 defaults:
   - /base
   - /task: country_borders
-  - /model: llama31_8b
+  - /model: llama31_8b_instruct
   - /analysis/locate
   - _self_
 task:
   enumerate_all: true # Enumerate all examples in the training set, test = []
   intervention_metric: string_match
-  resample_variable: country
+  resample_variable: all # <-- changing to all variables, since we don't use counterfactual pairs anyways, the centroids will be our counterfactual pairs.
   target_variable: country
 
 locate:
   method: interchange
-  mode: pairwise
+  mode: centroid # <-- changing to centroid mode
   layers: [0, 8, 16, 20, 24, 28]
   n_steer: 16
   visualization:

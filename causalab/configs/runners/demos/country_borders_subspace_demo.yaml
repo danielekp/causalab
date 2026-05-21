@@ -2,11 +2,11 @@
 defaults:
   - /base
   - /task: country_borders
-  - /model: llama31_8b
+  - /model: llama31_8b_instruct
   - /analysis/subspace
   - _self_
 task:
-  enumerate_all: true
+  enumerate_all: true # training on all possible examples, test = train
   target_variable: country
 
 subspace:
