@@ -29,11 +29,23 @@ def _register_gemma3_with_pyvene() -> None:
     ``IntervenableModel`` over a Gemma3 model otherwise raises
     ``KeyError: Gemma3ForCausalLM`` in ``get_dimension_by_component``.
 
-    Gemma3's text decoder is architecturally identical to Gemma2 (same
-    RMSNorm, SwiGLU MLP, RoPE + sliding-window; matching ``q/k/v/o_proj``
-    and ``gate/up/down_proj/act_fn`` paths; ``hidden_size``,
-    ``num_attention_heads``, ``num_key_value_heads``, ``intermediate_size``,
-    ``head_dim`` on the config), so the Gemma2 mappings drop in unchanged.
+    Gemma3's text decoder is architecturally compatible with Gemma2 at
+    every module path and config attribute pyvene's Gemma2 mapping reads:
+    matching ``q/k/v/o_proj`` and ``gate/up/down_proj/act_fn`` paths;
+    ``hidden_size``, ``num_attention_heads``, ``num_key_value_heads``,
+    ``intermediate_size``, ``head_dim`` on ``Gemma3TextConfig``. So the
+    Gemma2 mappings drop in unchanged for the hook points the manifold/
+    locate analyses use (residual stream — ``block_input``/``block_output``
+    — and MLP/attention I/O).
+
+    Caveat for hypothetical future Q/K-projection interventions: Gemma3
+    adds ``self_attn.q_norm`` and ``self_attn.k_norm`` (Gemma3RMSNorm)
+    applied to the projected queries/keys before RoPE, which Gemma2 does
+    not have. Hooking ``query_output``/``key_output`` (the raw q/k_proj
+    output) would have its effect silently normalized away before reaching
+    attention — a semantic shift vs Gemma2, though the dimensions still
+    resolve. Not relevant to current analyses.
+
     No-op when pyvene already knows about Gemma3 or when the installed
     transformers is too old to expose ``Gemma3ForCausalLM``.
     """
