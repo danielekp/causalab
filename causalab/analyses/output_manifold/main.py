@@ -158,6 +158,7 @@ def _build_belief_artifacts(cfg: DictConfig, out_root: str, batch_size: int) -> 
             dtype=cfg.model.get("dtype"),
             eager_attn=cfg.model.get("eager_attn"),
             use_chat_template=cfg.model.get("use_chat_template", False),
+            model_class=cfg.model.get("model_class"),
         )
         score_token_ids, _ = get_output_token_ids(task, pipeline)
         if score_token_ids is None or not task.intervention_values:

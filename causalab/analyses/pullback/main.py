@@ -361,6 +361,7 @@ def main(cfg: DictConfig) -> dict[str, Any]:
         dtype=cfg.model.get("dtype"),
         eager_attn=cfg.model.get("eager_attn"),
         use_chat_template=cfg.model.get("use_chat_template", False),
+        model_class=cfg.model.get("model_class"),
     )
     model = pipeline.model
     tokenizer = pipeline.tokenizer

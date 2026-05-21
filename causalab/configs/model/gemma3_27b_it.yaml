@@ -9,5 +9,11 @@ eager_attn: false
 # the existing `last_token: position: -1` correctly captures the last token
 # before generation.
 use_chat_template: true
+# Gemma 3 4B/12B/27B ship as multimodal wrappers (Gemma3ForConditionalGeneration)
+# whose Gemma3Config nests text fields under .text_config and whose decoder
+# layers are at .language_model.model.layers.<n>. Force-load the text-only
+# Gemma3ForCausalLM class so config is flat (Gemma3TextConfig) and pyvene's
+# `model.layers.<n>` path resolves correctly.
+model_class: Gemma3ForCausalLM
 slurm:
   gpus: 2
