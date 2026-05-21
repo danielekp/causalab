@@ -1,0 +1,13 @@
+id: gemma3_27b_it
+name: google/gemma-3-27b-it
+device: auto
+dtype: bfloat16
+eager_attn: false
+# Gemma 3 is instruction-tuned; wrap each raw_input with
+# `apply_chat_template([{role: user, content: text}], add_generation_prompt=True)`
+# inside LMPipeline.tokenize(). The prompt ends `<start_of_turn>model\n`, so
+# the existing `last_token: position: -1` correctly captures the last token
+# before generation.
+use_chat_template: true
+slurm:
+  gpus: 2

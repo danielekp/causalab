@@ -2,7 +2,7 @@
 defaults:
   - /base
   - /task: country_borders
-  - /model: gemma3_12b_it
+  - /model: gemma3_27b_it
   - /analysis/locate
   - _self_
 task:
