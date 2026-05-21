@@ -2,7 +2,7 @@
 defaults:
   - /base
   - /task: country_borders
-  - /model: llama31_8b_instruct
+  - /model: gemma4_e4b_it
   - /analysis/baseline
   - _self_
 task:

@@ -2,7 +2,7 @@
 defaults:
   - /base
   - /task: country_borders
-  - /model: llama31_8b
+  - /model: gemma4_e4b_it
   - /analysis/activation_manifold
   - _self_
 task:
