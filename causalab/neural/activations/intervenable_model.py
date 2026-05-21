@@ -10,12 +10,53 @@ and managing their lifecycle, including proper memory cleanup.
 from __future__ import annotations
 
 import gc
+import logging
 
 import torch
 import pyvene as pv  # type: ignore[import-untyped]
 
 from causalab.neural.pipeline import Pipeline
 from causalab.neural.units import AtomicModelUnit, InterchangeTarget
+
+logger = logging.getLogger(__name__)
+
+
+def _register_gemma3_with_pyvene() -> None:
+    """Register ``Gemma3ForCausalLM`` with pyvene using Gemma2 mappings.
+
+    pyvene's ``intervenable_modelcard`` ships entries for Llama, Gemma1,
+    Gemma2, Mistral, Qwen2/3, Olmo, GptOss, … but not Gemma3 — building an
+    ``IntervenableModel`` over a Gemma3 model otherwise raises
+    ``KeyError: Gemma3ForCausalLM`` in ``get_dimension_by_component``.
+
+    Gemma3's text decoder is architecturally identical to Gemma2 (same
+    RMSNorm, SwiGLU MLP, RoPE + sliding-window; matching ``q/k/v/o_proj``
+    and ``gate/up/down_proj/act_fn`` paths; ``hidden_size``,
+    ``num_attention_heads``, ``num_key_value_heads``, ``intermediate_size``,
+    ``head_dim`` on the config), so the Gemma2 mappings drop in unchanged.
+    No-op when pyvene already knows about Gemma3 or when the installed
+    transformers is too old to expose ``Gemma3ForCausalLM``.
+    """
+    try:
+        from transformers.models.gemma3.modeling_gemma3 import Gemma3ForCausalLM
+    except ImportError:
+        return
+    from pyvene.models.intervenable_modelcard import (  # type: ignore[import-untyped]
+        type_to_module_mapping,
+        type_to_dimension_mapping,
+    )
+    if Gemma3ForCausalLM in type_to_dimension_mapping:
+        return
+    from pyvene.models.gemma2.modelings_intervenable_gemma2 import (  # type: ignore[import-untyped]
+        gemma2_lm_type_to_module_mapping,
+        gemma2_lm_type_to_dimension_mapping,
+    )
+    type_to_module_mapping[Gemma3ForCausalLM] = gemma2_lm_type_to_module_mapping
+    type_to_dimension_mapping[Gemma3ForCausalLM] = gemma2_lm_type_to_dimension_mapping
+    logger.info("Registered Gemma3ForCausalLM with pyvene (reusing Gemma2 mappings).")
+
+
+_register_gemma3_with_pyvene()
 
 
 def prepare_intervenable_model(
