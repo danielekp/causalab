@@ -2,7 +2,7 @@
 defaults:
   - /base
   - /task: country_borders
-  - /model: llama31_70b
+  - /model: gemma3_12b_it
   - /analysis/path_steering
   - _self_
 task:

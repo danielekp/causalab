@@ -1,0 +1,7 @@
+id: gemma3_12b_it
+name: google/gemma-3-12b-it
+device: auto
+dtype: bfloat16
+eager_attn: false
+slurm:
+  gpus: 1
