@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: gemma3_4b_pt
+  - /analysis/activation_manifold
+  - _self_
+task:
+  target_variable: country
+activation_manifold:
+  method: spline
+  intrinsic_mode: parameter
+  intrinsic_dim: 2
+  smoothness: 0.0
+  subspace: pca_k32
+  layers: [33]
+  token_positions: [last_token]
+  skip_decoding_eval: false
+  visualization:
+    figure_format: png
