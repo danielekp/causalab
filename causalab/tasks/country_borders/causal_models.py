@@ -23,7 +23,7 @@ from .config import (
     COUNTRY_FIRST_TOKEN_OF,
     LAT_LON_OF,
     VALID_CELLS,
-    primary_neighbor,
+    all_neighbors,
 )
 from .templates import TEMPLATES, fill_template
 
@@ -35,17 +35,23 @@ def _compute_raw_input(t: CausalTrace) -> str:
     return fill_template(t["template"], country, dir_phrase)
 
 
-def _compute_raw_output(t: CausalTrace) -> str:
-    """First BPE token of the primary neighbor for (country, direction).
+def _compute_raw_output(t: CausalTrace) -> list[str]:
+    """First BPE tokens of ALL valid neighbors for (country, direction).
 
-    Cells outside VALID_CELLS (e.g. a (country, direction) pair with no land
-    neighbor) return an empty string — the framework's correct-only filter
-    will drop these naturally.
+    Any element counts as a correct answer — ``compute_base_accuracy`` and the
+    task checker both accept a match against any item in the list. The leading
+    entry is the canonical answer country (used for centroid grouping). Cells
+    with no in-set neighbor are excluded from the dataset by the model's
+    ``input_filter`` (set below), so an empty list is only returned if this is
+    called directly on such a cell.
     """
     key = (t["country"], t["direction"])
     if key not in NEIGHBOR_OF:
-        return ""
-    return COUNTRY_FIRST_TOKEN_OF[primary_neighbor(t["country"], t["direction"])]
+        return []
+    return [
+        COUNTRY_FIRST_TOKEN_OF[n]
+        for n in all_neighbors(t["country"], t["direction"])
+    ]
 
 
 values: dict[str, list | None] = {
@@ -98,6 +104,12 @@ causal_model = CausalModel(
     id=TASK_NAME,
     embeddings=embeddings,
 )
+
+# Only enumerate / sample (country, direction) pairs that have at least one
+# in-set neighbor. Without this, the full 30x8 product would include ~74
+# unanswerable cells (coastal/edge directions) whose empty raw_output would be
+# scored as wrong, deflating accuracy and polluting PCA/centroid activations.
+causal_model.input_filter = lambda t: (t["country"], t["direction"]) in NEIGHBOR_OF
 
 # Exports consumed by causalab.tasks.loader.load_task:
 CAUSAL_MODEL = causal_model

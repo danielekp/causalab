@@ -1,11 +1,12 @@
 """Output checker for the country_borders task.
 
-For cells with multiple valid neighbors (e.g. Germany W → France/Belgium/
-Netherlands), the checker accepts ANY of the neighbors as a correct answer
-by first-token match. The strict-equality `compute_base_accuracy` path will
-still only credit predictions matching the canonical primary; this richer
-checker is used by analyses that pass a pipeline-bound `make_checker` —
-mainly the post-hoc accuracy summary that we add downstream.
+For cells with multiple valid neighbors (e.g. Germany W → Netherlands/Belgium/
+France), the checker accepts ANY of the neighbors as a correct answer by
+first-token match. Since ``raw_output`` is now the full neighbor list, the
+``compute_base_accuracy`` path already credits any listed neighbor too; this
+pipeline-bound checker additionally re-tokenizes per the model's tokenizer and
+can recover the cell from the input sample, so it stays robust when the same
+first sub-token is shared (e.g. multi-token country names).
 """
 from __future__ import annotations
 
@@ -47,20 +48,26 @@ def make_checker(pipeline: LMPipeline):
                 }
                 return actual_first in accepted
 
-        # Fallback: strict first-token equality against causal_output.
-        expected_first = _first_token_id(causal_output)
-        return expected_first is not None and actual_first == expected_first
+        # Fallback: first-token match against any entry of causal_output
+        # (raw_output is a list of neighbor first-tokens; a single string is
+        # also tolerated).
+        expected = causal_output if isinstance(causal_output, list) else [causal_output]
+        accepted = {_first_token_id(e) for e in expected}
+        accepted.discard(None)
+        return actual_first in accepted
 
     return checker
 
 
-def checker(neural_output: dict[str, Any], causal_output: str) -> bool:
+def checker(neural_output: dict[str, Any], causal_output: str | list[str]) -> bool:
     """Fallback string-level checker for when no tokenizer has been bound.
 
-    Compares the first whitespace-stripped word.
+    Accepts the prediction if its first whitespace-stripped word matches that
+    of any acceptable neighbor in ``causal_output`` (the raw_output list).
     """
     actual = neural_output["string"].strip().split()
-    expected = causal_output.strip().split()
-    if not actual or not expected:
+    if not actual:
         return False
-    return actual[0] == expected[0]
+    expected = causal_output if isinstance(causal_output, list) else [causal_output]
+    firsts = {e.strip().split()[0] for e in expected if e.strip().split()}
+    return actual[0] in firsts

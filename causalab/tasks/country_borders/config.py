@@ -2,11 +2,15 @@
 
 The model is given a (country, direction) pair and must produce the country
 that borders the given country in the specified direction. With 8 directions
-(N, NE, E, SE, S, SW, W, NW), most cells have a single canonical answer; cells
-where multiple countries border in the same direction are handled by listing
-all valid neighbors (primary first) — the primary is used as raw_output for
-strict-equality scoring and centroid construction, the full list is used by
-the custom checker to accept any valid neighbor as correct.
+(N, NE, E, SE, S, SW, W, NW), many cells have more than one valid answer, so
+every cell lists ALL acceptable neighbors (most-central first). A prediction
+is scored correct when it matches ANY neighbor in the cell's list: raw_output
+is the full list of neighbor first-tokens (compute_base_accuracy credits any
+match), and the custom checker honours the same rule. The leading entry is the
+canonical "answer country" used for centroid grouping in downstream geometry
+analyses. (country, direction) pairs with no in-set neighbor are absent from
+the table and are excluded from the dataset via the causal model's
+input_filter, so they never count against accuracy.
 
 Design rationale: Border queries map multiple distinct (country, direction)
 prompts onto the same answer country, e.g. (Spain, NE), (Italy, NW),
@@ -52,242 +56,250 @@ DIRECTION_PHRASE: dict[str, str] = {
     "NW": "northwest",
 }
 
-# Adjacency table: (country, direction) -> ordered list of valid neighboring
-# countries (primary first). Cells with no land neighbor in that direction
-# (ocean, or all bordering countries lie outside the 30-country set) are
-# absent.
+# Adjacency table: (country, direction) -> list of ALL valid neighboring
+# countries for that compass octant (most-central first). EVERY country in a
+# list counts as a correct answer for that (country, direction) query — the
+# checker and base-accuracy both credit any listed neighbor (see metrics.py /
+# checker.py and _compute_raw_output in causal_models.py).
 #
-# Conventions:
-# - Short sea borders (Denmark-Sweden via Øresund, Finland-Estonia via Gulf
-#   of Finland, Denmark-Norway via Skagerrak) are included as borders.
-# - Borders via small non-set countries (e.g. Luxembourg, Andorra, Bosnia,
-#   Kosovo, Moldova, Monaco, San Marino, North Macedonia, Montenegro) are
-#   "tunneled through" — i.e. France↔Germany are considered adjacent even
-#   though Luxembourg sits between them at the NE corner, because Luxembourg
-#   isn't in our country set.
-# - Primary = the most prominent / longest shared border in that direction.
+# Construction (see git history / PR for full derivation):
+# - Edges are the real shared land borders among the 30 in-set countries,
+#   PLUS three short sea borders (Denmark-Sweden via Oresund, Denmark-Norway
+#   via Skagerrak, Finland-Estonia via the Gulf of Finland), PLUS one
+#   micro-state "tunnel": France-Germany across the Luxembourg gap. We do NOT
+#   tunnel through full-size countries, so e.g. Serbia does not border Albania
+#   (Kosovo/Montenegro lie between), and Kaliningrad is ignored (Poland and
+#   Lithuania are not treated as bordering Russia).
+# - "All plausible octants": a neighbor is listed under every octant its
+#   relation reasonably spans -- the union of (a) the octant(s) of the
+#   capital-to-capital bearing (+/-33.75 deg) and (b) the hand-checked
+#   border-facing direction. This is why most cells list more than one answer.
 NEIGHBOR_OF: dict[tuple[str, str], list[str]] = {
     # France
-    ("France", "N"):  ["Belgium"],
-    ("France", "NE"): ["Germany"],
-    ("France", "E"):  ["Switzerland"],
-    ("France", "SE"): ["Italy"],
+    ("France", "N"): ["Belgium"],
+    ("France", "NE"): ["Belgium", "Germany"],
+    ("France", "E"): ["Switzerland", "Germany"],
+    ("France", "SE"): ["Italy", "Switzerland"],
+    ("France", "S"): ["Spain"],
     ("France", "SW"): ["Spain"],
 
     # Italy
-    ("Italy", "NW"): ["France"],
-    ("Italy", "N"):  ["Switzerland", "Austria"],
-    ("Italy", "NE"): ["Slovenia", "Austria"],
+    ("Italy", "N"): ["Slovenia", "Austria", "Switzerland"],
+    ("Italy", "NE"): ["Austria", "Slovenia"],
+    ("Italy", "NW"): ["France", "Switzerland"],
 
     # Spain
+    ("Spain", "N"): ["France"],
     ("Spain", "NE"): ["France"],
-    ("Spain", "W"):  ["Portugal"],
     ("Spain", "SW"): ["Portugal"],
+    ("Spain", "W"): ["Portugal"],
 
-    # Portugal — only Spain neighbors it; expressed in 3 cells for centroid
-    # density. All three prompts contribute to Spain's centroid only via
-    # different directions; Portugal centroid will be entity-thin (only Spain
-    # as input entity) — flag in downstream analysis.
-    ("Portugal", "E"):  ["Spain"],
+    # Portugal
+    ("Portugal", "N"): ["Spain"],
     ("Portugal", "NE"): ["Spain"],
-    ("Portugal", "N"):  ["Spain"],
+    ("Portugal", "E"): ["Spain"],
 
     # Romania
-    ("Romania", "N"):  ["Ukraine"],
-    ("Romania", "S"):  ["Bulgaria"],
-    ("Romania", "SW"): ["Serbia"],
-    ("Romania", "W"):  ["Hungary"],
+    ("Romania", "N"): ["Ukraine"],
+    ("Romania", "NE"): ["Ukraine"],
+    ("Romania", "S"): ["Bulgaria"],
+    ("Romania", "SW"): ["Bulgaria", "Serbia"],
+    ("Romania", "W"): ["Serbia", "Hungary"],
+    ("Romania", "NW"): ["Hungary"],
 
     # Germany
-    ("Germany", "N"):  ["Denmark"],
-    ("Germany", "E"):  ["Poland"],
-    ("Germany", "SE"): ["Czech Republic"],
-    ("Germany", "S"):  ["Austria"],
-    ("Germany", "SW"): ["Switzerland", "France"],
-    ("Germany", "W"):  ["France", "Belgium", "Netherlands"],
+    ("Germany", "N"): ["Denmark"],
+    ("Germany", "E"): ["Poland"],
+    ("Germany", "SE"): ["Austria", "Czech Republic"],
+    ("Germany", "S"): ["Czech Republic", "Austria"],
+    ("Germany", "SW"): ["Switzerland", "France", "Belgium"],
+    ("Germany", "W"): ["Netherlands", "Belgium", "France"],
     ("Germany", "NW"): ["Netherlands"],
 
     # Netherlands
     ("Netherlands", "E"): ["Germany"],
     ("Netherlands", "S"): ["Belgium"],
+    ("Netherlands", "SW"): ["Belgium"],
 
     # Belgium
-    ("Belgium", "N"):  ["Netherlands"],
-    ("Belgium", "E"):  ["Germany"],
-    # (Belgium, SE) → Germany REMOVED: tunnels through Luxembourg; model
-    # consistently says France instead.
-    ("Belgium", "S"):  ["France"],
+    ("Belgium", "N"): ["Netherlands"],
+    ("Belgium", "NE"): ["Germany", "Netherlands"],
+    ("Belgium", "E"): ["Germany"],
+    ("Belgium", "S"): ["France"],
     ("Belgium", "SW"): ["France"],
 
     # Austria
-    ("Austria", "N"):  ["Czech Republic"],
-    ("Austria", "NW"): ["Germany"],
-    ("Austria", "NE"): ["Slovakia"],   # Czech Republic is NW not NE
-    ("Austria", "E"):  ["Hungary", "Slovakia"],
-    ("Austria", "SE"): ["Hungary"],    # Slovenia is SW not SE (already covered by S primary)
-    ("Austria", "S"):  ["Slovenia", "Italy"],
-    ("Austria", "SW"): ["Italy", "Switzerland"],
-    ("Austria", "W"):  ["Switzerland"],
+    ("Austria", "N"): ["Germany", "Czech Republic"],
+    ("Austria", "NE"): ["Slovakia"],
+    ("Austria", "E"): ["Slovakia", "Hungary"],
+    ("Austria", "SE"): ["Hungary"],
+    ("Austria", "S"): ["Italy", "Slovenia"],
+    ("Austria", "SW"): ["Slovenia", "Italy", "Switzerland"],
+    ("Austria", "W"): ["Switzerland"],
+    ("Austria", "NW"): ["Czech Republic", "Germany"],
 
     # Switzerland
-    ("Switzerland", "N"):  ["Germany"],
-    ("Switzerland", "E"):  ["Austria"],
-    ("Switzerland", "S"):  ["Italy"],
+    ("Switzerland", "N"): ["Germany"],
+    ("Switzerland", "NE"): ["Germany", "Austria"],
+    ("Switzerland", "E"): ["Austria"],
     ("Switzerland", "SE"): ["Italy"],
-    ("Switzerland", "W"):  ["France"],
+    ("Switzerland", "S"): ["Italy"],
+    ("Switzerland", "W"): ["France"],
+    ("Switzerland", "NW"): ["France"],
 
     # Norway
-    ("Norway", "E"):  ["Sweden"],
     ("Norway", "NE"): ["Finland", "Sweden"],
-    # (Norway, S) → Denmark REMOVED: across Skagerrak sea border; model
-    # strongly prefers Sweden (which is geographically SE).
+    ("Norway", "E"): ["Russia", "Sweden", "Finland"],
+    ("Norway", "SE"): ["Denmark"],
+    ("Norway", "S"): ["Denmark"],
 
     # Sweden
-    ("Sweden", "W"):  ["Norway"],
-    ("Sweden", "NW"): ["Norway"],
-    ("Sweden", "E"):  ["Finland"],
     ("Sweden", "NE"): ["Finland"],
-    ("Sweden", "S"):  ["Denmark"],   # across Øresund
+    ("Sweden", "E"): ["Finland"],
+    ("Sweden", "S"): ["Denmark"],
     ("Sweden", "SW"): ["Denmark"],
+    ("Sweden", "W"): ["Norway"],
+    ("Sweden", "NW"): ["Norway"],
 
     # Denmark
-    ("Denmark", "S"):  ["Germany"],
-    ("Denmark", "E"):  ["Sweden"],   # across Øresund
+    ("Denmark", "N"): ["Norway"],
     ("Denmark", "NE"): ["Sweden"],
-    ("Denmark", "N"):  ["Norway"],   # across Skagerrak
+    ("Denmark", "E"): ["Sweden"],
+    ("Denmark", "S"): ["Germany"],
+    ("Denmark", "NW"): ["Norway"],
 
     # Poland
-    ("Poland", "W"):  ["Germany"],
-    ("Poland", "S"):  ["Slovakia", "Czech Republic"],
-    ("Poland", "SW"): ["Czech Republic"],
-    ("Poland", "SE"): ["Ukraine"],     # Slovakia is S not SE (already in S primary)
-    ("Poland", "E"):  ["Belarus"],
-    ("Poland", "NE"): ["Lithuania"],
+    ("Poland", "NE"): ["Lithuania", "Belarus"],
+    ("Poland", "E"): ["Ukraine", "Belarus"],
+    ("Poland", "SE"): ["Ukraine"],
+    ("Poland", "S"): ["Slovakia", "Czech Republic"],
+    ("Poland", "SW"): ["Slovakia", "Czech Republic"],
+    ("Poland", "W"): ["Germany", "Czech Republic"],
 
     # Czech Republic
-    ("Czech Republic", "NW"): ["Germany"],
-    ("Czech Republic", "W"):  ["Germany"],
-    ("Czech Republic", "N"):  ["Poland"],
+    ("Czech Republic", "N"): ["Germany", "Poland"],
     ("Czech Republic", "NE"): ["Poland"],
-    ("Czech Republic", "E"):  ["Slovakia"],
-    ("Czech Republic", "S"):  ["Austria"],
+    ("Czech Republic", "E"): ["Poland", "Slovakia"],
+    ("Czech Republic", "SE"): ["Slovakia", "Austria"],
+    ("Czech Republic", "S"): ["Austria"],
+    ("Czech Republic", "W"): ["Germany"],
+    ("Czech Republic", "NW"): ["Germany"],
 
     # Slovakia
-    ("Slovakia", "W"):  ["Czech Republic"],
-    ("Slovakia", "NW"): ["Czech Republic"],
-    ("Slovakia", "N"):  ["Poland"],
-    ("Slovakia", "E"):  ["Ukraine"],
-    ("Slovakia", "S"):  ["Hungary"],
+    ("Slovakia", "N"): ["Poland"],
+    ("Slovakia", "NE"): ["Poland", "Ukraine"],
+    ("Slovakia", "E"): ["Ukraine", "Hungary"],
+    ("Slovakia", "SE"): ["Hungary"],
+    ("Slovakia", "S"): ["Hungary"],
     ("Slovakia", "SW"): ["Austria"],
+    ("Slovakia", "W"): ["Austria", "Czech Republic"],
+    ("Slovakia", "NW"): ["Czech Republic"],
 
-    # Russia (European-facing borders only)
-    ("Russia", "NW"): ["Finland", "Estonia"],
-    ("Russia", "W"):  ["Belarus", "Estonia", "Latvia"],
+    # Russia
     ("Russia", "SW"): ["Ukraine", "Belarus"],
+    ("Russia", "W"): ["Belarus", "Latvia", "Norway", "Estonia"],
+    ("Russia", "NW"): ["Finland", "Estonia", "Norway", "Latvia"],
 
     # Ukraine
-    ("Ukraine", "N"):  ["Belarus"],
+    ("Ukraine", "N"): ["Belarus"],
     ("Ukraine", "NE"): ["Russia"],
-    ("Ukraine", "E"):  ["Russia"],
-    ("Ukraine", "W"):  ["Hungary", "Slovakia", "Poland"],
-    ("Ukraine", "NW"): ["Poland"],
-    ("Ukraine", "SW"): ["Romania"],
+    ("Ukraine", "E"): ["Russia"],
+    ("Ukraine", "S"): ["Romania"],
+    ("Ukraine", "SW"): ["Romania", "Hungary"],
+    ("Ukraine", "W"): ["Slovakia", "Hungary", "Poland"],
+    ("Ukraine", "NW"): ["Belarus", "Poland"],
 
     # Belarus
-    ("Belarus", "E"):  ["Russia"],
+    ("Belarus", "N"): ["Latvia", "Lithuania"],
     ("Belarus", "NE"): ["Russia"],
-    ("Belarus", "N"):  ["Latvia", "Lithuania"],
-    ("Belarus", "NW"): ["Lithuania"],
-    ("Belarus", "W"):  ["Poland"],
-    ("Belarus", "SW"): ["Poland"],
-    ("Belarus", "S"):  ["Ukraine"],
+    ("Belarus", "E"): ["Russia"],
     ("Belarus", "SE"): ["Ukraine"],
+    ("Belarus", "S"): ["Ukraine"],
+    ("Belarus", "SW"): ["Poland"],
+    ("Belarus", "W"): ["Poland", "Lithuania"],
+    ("Belarus", "NW"): ["Lithuania", "Latvia"],
 
     # Bulgaria
-    ("Bulgaria", "N"):  ["Romania"],
+    ("Bulgaria", "N"): ["Romania"],
     ("Bulgaria", "NE"): ["Romania"],
-    ("Bulgaria", "W"):  ["Serbia"],
+    ("Bulgaria", "S"): ["Greece"],
     ("Bulgaria", "SW"): ["Greece"],
-    ("Bulgaria", "S"):  ["Greece"],
+    ("Bulgaria", "W"): ["Serbia"],
+    ("Bulgaria", "NW"): ["Serbia"],
 
     # Serbia
-    ("Serbia", "N"):  ["Hungary"],
+    ("Serbia", "N"): ["Hungary"],
     ("Serbia", "NE"): ["Romania"],
-    ("Serbia", "E"):  ["Bulgaria"],
+    ("Serbia", "E"): ["Romania", "Bulgaria"],
     ("Serbia", "SE"): ["Bulgaria"],
-    # (Serbia, S) → Albania REMOVED: tunnels through Kosovo; model says
-    # Macedonia (geographically directly south, not in set).
-    # (Serbia, SW) → Albania REMOVED: same reason (Kosovo/Montenegro).
-    ("Serbia", "W"):  ["Croatia"],
-    ("Serbia", "NW"): ["Croatia"],
+    ("Serbia", "W"): ["Croatia"],
+    ("Serbia", "NW"): ["Croatia", "Hungary"],
 
     # Croatia
-    ("Croatia", "N"):  ["Slovenia", "Hungary"],
-    ("Croatia", "NW"): ["Slovenia"],
+    ("Croatia", "N"): ["Hungary", "Slovenia"],
     ("Croatia", "NE"): ["Hungary"],
-    ("Croatia", "E"):  ["Serbia"],
+    ("Croatia", "E"): ["Serbia"],
     ("Croatia", "SE"): ["Serbia"],
+    ("Croatia", "W"): ["Slovenia"],
+    ("Croatia", "NW"): ["Slovenia"],
 
     # Slovenia
-    ("Slovenia", "W"):  ["Italy"],
-    ("Slovenia", "SW"): ["Italy"],
-    ("Slovenia", "N"):  ["Austria"],
-    ("Slovenia", "E"):  ["Hungary"],
-    ("Slovenia", "NE"): ["Hungary"],
-    ("Slovenia", "S"):  ["Croatia"],
+    ("Slovenia", "N"): ["Austria"],
+    ("Slovenia", "NE"): ["Austria", "Hungary"],
+    ("Slovenia", "E"): ["Croatia", "Hungary"],
     ("Slovenia", "SE"): ["Croatia"],
+    ("Slovenia", "S"): ["Italy", "Croatia"],
+    ("Slovenia", "SW"): ["Italy"],
+    ("Slovenia", "W"): ["Italy"],
 
     # Finland
-    ("Finland", "W"):  ["Sweden"],
-    ("Finland", "NW"): ["Norway"],     # Sweden is W not NW (already in W primary)
-    ("Finland", "N"):  ["Norway"],
-    ("Finland", "E"):  ["Russia"],
+    ("Finland", "N"): ["Norway"],
+    ("Finland", "E"): ["Russia"],
     ("Finland", "SE"): ["Russia"],
-    ("Finland", "S"):  ["Estonia"],   # across Gulf of Finland
+    ("Finland", "S"): ["Estonia"],
+    ("Finland", "W"): ["Norway", "Sweden"],
+    ("Finland", "NW"): ["Norway"],
 
     # Hungary
-    ("Hungary", "N"):  ["Slovakia"],
+    ("Hungary", "N"): ["Slovakia"],
     ("Hungary", "NE"): ["Ukraine"],
-    ("Hungary", "E"):  ["Romania"],
-    ("Hungary", "SE"): ["Romania"],
-    ("Hungary", "S"):  ["Serbia", "Croatia"],
+    ("Hungary", "E"): ["Ukraine", "Romania"],
+    ("Hungary", "SE"): ["Romania", "Serbia"],
+    ("Hungary", "S"): ["Serbia", "Croatia"],
     ("Hungary", "SW"): ["Croatia", "Slovenia"],
-    ("Hungary", "W"):  ["Austria", "Slovenia"],
-    ("Hungary", "NW"): ["Austria"],
+    ("Hungary", "W"): ["Austria", "Slovenia", "Slovakia"],
+    ("Hungary", "NW"): ["Slovakia", "Austria"],
 
     # Estonia
-    ("Estonia", "S"):  ["Latvia"],
-    ("Estonia", "E"):  ["Russia"],
-    ("Estonia", "N"):  ["Finland"],   # across Gulf
+    ("Estonia", "N"): ["Finland"],
+    ("Estonia", "E"): ["Russia"],
+    ("Estonia", "SE"): ["Russia"],
+    ("Estonia", "S"): ["Latvia"],
     ("Estonia", "NW"): ["Finland"],
 
     # Latvia
-    ("Latvia", "N"):  ["Estonia"],
-    ("Latvia", "S"):  ["Lithuania"],
-    ("Latvia", "E"):  ["Russia"],
-    ("Latvia", "SE"): ["Belarus"],
+    ("Latvia", "N"): ["Estonia"],
+    ("Latvia", "E"): ["Russia"],
+    ("Latvia", "SE"): ["Belarus", "Lithuania"],
+    ("Latvia", "S"): ["Lithuania"],
 
     # Lithuania
-    ("Lithuania", "N"):  ["Latvia"],
-    ("Lithuania", "E"):  ["Belarus"],
+    ("Lithuania", "N"): ["Latvia"],
+    ("Lithuania", "E"): ["Belarus"],
     ("Lithuania", "SE"): ["Belarus"],
-    ("Lithuania", "S"):  ["Poland"],
-    # (Lithuania, SW) → Russia REMOVED: Kaliningrad exclave; model
-    # consistently says Latvia/Poland/Belarus — it doesn't know Kaliningrad
-    # is Russian territory.
-    # (Lithuania, W) → Russia REMOVED: same reason.
+    ("Lithuania", "S"): ["Poland"],
+    ("Lithuania", "SW"): ["Poland"],
+    ("Lithuania", "NW"): ["Latvia"],
 
     # Greece
-    ("Greece", "N"):  ["Bulgaria"],
+    ("Greece", "N"): ["Bulgaria"],
     ("Greece", "NE"): ["Bulgaria"],
+    ("Greece", "W"): ["Albania"],
     ("Greece", "NW"): ["Albania"],
-    ("Greece", "W"):  ["Albania"],
 
     # Albania
-    ("Albania", "S"):  ["Greece"],
     ("Albania", "SE"): ["Greece"],
-    # (Albania, NE) → Serbia REMOVED: tunnels through Kosovo; model says
-    # Macedonia or Kosovo (neither in set).
+    ("Albania", "S"): ["Greece"],
 }
 
 

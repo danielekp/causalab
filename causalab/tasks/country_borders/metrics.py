@@ -1,21 +1,21 @@
 """Metrics for the country_borders task.
 
 The metric signature is fixed: `metric(neural_output, causal_output) -> bool`.
-No access to logits / tokenizer / pipeline / input sample. We compare the
-first whitespace-delimited word of each output, which approximates first-
-token agreement against the *primary* canonical neighbor. For multi-neighbor
-acceptance, use `checker.make_checker(pipeline)` which has access to the
-input sample.
+No access to logits / tokenizer / pipeline / input sample. ``causal_output`` is
+``raw_output`` — the list of acceptable neighbor first-tokens — so we count the
+prediction correct when its first word matches the first word of ANY listed
+neighbor. (A legacy single-string ``causal_output`` is also accepted.)
 """
 from __future__ import annotations
 
 from typing import Any
 
 
-def metric(neural_output: dict[str, Any], causal_output: str) -> bool:
-    """First-word match between model output and expected (primary) neighbor."""
+def metric(neural_output: dict[str, Any], causal_output: str | list[str]) -> bool:
+    """First-word match between model output and any acceptable neighbor."""
     actual = neural_output["string"].strip().split()
-    expected = causal_output.strip().split()
-    if not actual or not expected:
+    if not actual:
         return False
-    return actual[0] == expected[0]
+    expected = causal_output if isinstance(causal_output, list) else [causal_output]
+    expected_firsts = {e.strip().split()[0] for e in expected if e.strip().split()}
+    return actual[0] in expected_firsts
