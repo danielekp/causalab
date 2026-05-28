@@ -246,14 +246,13 @@ def main(cfg: DictConfig) -> dict[str, Any]:
         top_logits_examples = []
         for i, ex in enumerate(train_dataset):
             raw_out = ex["input"]["raw_output"]
-            # For multi-step generation tasks (e.g. graph_walk) raw_output is a
-            # list of per-step tokens; the model only emits one token here, so
-            # compare against the first expected step.
-            raw_out_str = (
-                str(raw_out[0])
-                if isinstance(raw_out, list) and raw_out
-                else str(raw_out or "")
-            )
+            # raw_output may be a list of acceptable answers (any one correct,
+            # e.g. country_borders / graph_walk). The model emits a single token
+            # here, so credit a match against ANY listed answer — consistent
+            # with compute_base_accuracy.
+            raw_out_list = [
+                str(a) for a in (raw_out if isinstance(raw_out, list) else [raw_out])
+            ]
             generated = tokenizer.decode(top_ids[i, 0].item())
             top_tokens = [
                 {
@@ -267,7 +266,9 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                 {
                     "raw_output": raw_out,
                     "top_tokens": top_tokens,
-                    "correct": generated.strip() == raw_out_str.strip(),
+                    "correct": any(
+                        generated.strip() == a.strip() for a in raw_out_list
+                    ),
                 }
             )
         save_json_results(

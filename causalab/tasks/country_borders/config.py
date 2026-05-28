@@ -303,6 +303,36 @@ NEIGHBOR_OF: dict[tuple[str, str], list[str]] = {
 }
 
 
+
+# Out-of-set REAL neighbours (micro-states / non-set countries) that border
+# the country in that octant. Accepted as correct for SCORING ONLY (the model
+# is geographically right when it names them); they are NOT in COUNTRIES and
+# never become the canonical answer, so the geometry/centroid analysis is
+# unchanged. Only single-token surface forms are listed (the model emits one
+# token). Only cells that exist in NEIGHBOR_OF are included.
+EXTRA_ACCEPT: dict[tuple[str, str], list[str]] = {
+    ("Austria", "W"): [" Liechtenstein"],
+    ("Croatia", "SE"): [" Bosnia"],
+    ("France", "E"): [" Luxembourg"],
+    ("France", "NE"): [" Luxembourg"],
+    ("France", "S"): [" Andorra"],
+    ("France", "SE"): [" Monaco"],
+    ("Germany", "SW"): [" Luxembourg"],
+    ("Germany", "W"): [" Luxembourg"],
+    ("Greece", "NE"): [" Turkey"],
+    ("Romania", "NE"): [" Moldova"],
+    ("Serbia", "W"): [" Bosnia"],
+    ("Spain", "NE"): [" Andorra"],
+    ("Switzerland", "E"): [" Liechtenstein"],
+    ("Ukraine", "S"): [" Moldova"],
+    ("Ukraine", "SW"): [" Moldova"],
+}
+
+# Surface-form synonyms for in-set answer countries (accepted for scoring).
+SYNONYMS: dict[str, list[str]] = {
+    "Netherlands": [" Holland"],
+}
+
 def primary_neighbor(country: str, direction: str) -> str:
     """Return the canonical primary neighbor for a (country, direction) cell."""
     return NEIGHBOR_OF[(country, direction)][0]

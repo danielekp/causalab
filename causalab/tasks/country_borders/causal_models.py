@@ -23,6 +23,8 @@ from .config import (
     COUNTRY_FIRST_TOKEN_OF,
     LAT_LON_OF,
     VALID_CELLS,
+    EXTRA_ACCEPT,
+    SYNONYMS,
     all_neighbors,
 )
 from .templates import TEMPLATES, fill_template
@@ -48,10 +50,13 @@ def _compute_raw_output(t: CausalTrace) -> list[str]:
     key = (t["country"], t["direction"])
     if key not in NEIGHBOR_OF:
         return []
-    return [
-        COUNTRY_FIRST_TOKEN_OF[n]
-        for n in all_neighbors(t["country"], t["direction"])
-    ]
+    neighbors = all_neighbors(*key)
+    accepted = [COUNTRY_FIRST_TOKEN_OF[n] for n in neighbors]
+    for n in neighbors:  # surface-form synonyms (e.g. Holland for Netherlands)
+        accepted += SYNONYMS.get(n, [])
+    accepted += EXTRA_ACCEPT.get(key, [])  # real out-of-set neighbors (scoring only)
+    seen: set[str] = set()
+    return [x for x in accepted if not (x in seen or seen.add(x))]
 
 
 values: dict[str, list | None] = {
