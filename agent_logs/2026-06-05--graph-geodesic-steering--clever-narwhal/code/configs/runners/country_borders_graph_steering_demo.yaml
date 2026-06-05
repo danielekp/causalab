@@ -1,0 +1,18 @@
+# @package _global_
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: gemma3_4b_pt
+  - /analysis/graph_path_steering
+  - _self_
+task:
+  target_variable: country
+graph_path_steering:
+  subspace: pca_k32
+  activation_manifold: L33_last_token/spline_s0.0
+  selected_pairs: [["Spain", "Russia"]]
+  path_modes: [graph_geodesic, geometric, linear]
+  graph_k: 4
+  steps_per_segment: 6
+  visualization:
+    figure_format: png
