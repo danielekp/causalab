@@ -1,0 +1,9 @@
+# Raw objective input (verbatim)
+
+Implement a data-aware "true geodesic" path mode for the existing path_steering analysis on the country_borders task (Gemma 3 4B-PT). Problem: the current `geometric` mode interpolates linearly in the fitted 2-D (lat,lon) intrinsic space; for far pairs like Spain→Russia this only sweeps countries lying on the straight parameter-space segment, not a true route through intermediate countries. Goal: add a new path mode that (1) builds a k-NN graph over the answer-country centroids in PCA space with edge weights = inter-centroid distance, (2) runs Dijkstra from start to end country to get an ordered waypoint sequence, (3) steers along the waypoints with straight-line interpolation per segment in PCA space. Key integration gap: PathMode.build_path(start,end,...) only sees the two endpoints — the new mode needs the full centroid cloud + labels threaded through (signature/call-site change in causalab/analyses/path_steering/path_mode.py and main.py). Decomposition: a reusable geodesic primitive as a method (centroid graph + Dijkstra, pure, no I/O) under code/methods/, plus the path_steering path-mode wiring under code/analyses/. Evaluation: compare graph-geodesic vs geometric vs linear output landscapes for Spain→Russia (does the new mode sweep prediction mass through intermediate countries?).
+
+## Design decisions already locked (from interactive discussion)
+
+- Goal: build a true, data-aware geodesic (not just run the existing straight-line-in-intrinsic mode).
+- Geodesic variant: **graph over PCA centroids, linear segments** — k-NN graph on centroids in PCA space, Dijkstra waypoints, straight-line interpolation between consecutive centroids.
+- Started a fresh research session (user chose New over continuing the country-borders-geometry session).
