@@ -13,8 +13,11 @@ than re-fitting them, and reuses shipped `path_steering` machinery (`resolve_pat
 `centroid_graph_geodesic`.
 
 The three path modes:
-- **`graph_geodesic`** (new) — k-NN graph over the PCA country centroids → Dijkstra route → piecewise-linear
-  path; steered in PCA space via the same featurizer override as the shipped `linear_subspace` mode.
+- **`graph_geodesic`** (new) — k-NN graph over the PCA country centroids → Dijkstra route; steered in **raw
+  activation space** (identity featurizer) along the route countries' raw centroids — the same mechanism as
+  `linear`, differing only by the route (through intermediates vs. straight). The graph (route selection)
+  lives in PCA; the steering lives in raw space. (Steering in the PCA subspace via an inverse-PCA lift was a
+  no-op — the reconstruction dropped the off-subspace activation mass, so the patch had no effect.)
 - **`geometric`** (baseline) — geodesic in the manifold's intrinsic (lat, lon) coordinates.
 - **`linear`** (baseline) — straight line in raw activation space.
 

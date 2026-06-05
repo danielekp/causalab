@@ -49,12 +49,11 @@ from causalab.io.pipelines import (
 )
 from causalab.io.counterfactuals import load_counterfactual_examples
 from causalab.neural.pipeline import resolve_device
-from causalab.neural.featurizer import ComposedFeaturizer, Featurizer
+from causalab.neural.featurizer import Featurizer
 from causalab.methods.metric import tokenize_variable_values
 from causalab.methods.steer.collect import collect_grid_distributions
 from causalab.analyses.activation_manifold.loading import load_featurizer
 from causalab.analyses.path_steering.path_mode import (
-    resolve_path_modes,
     _build_geodesic_path,
     _build_linear_path_kd,
 )
@@ -246,10 +245,7 @@ def main(cfg: DictConfig) -> dict[str, Any]:
     )
     eval_samples = filtered_samples[: min(n_prompts, len(filtered_samples))]
 
-    # --- Resolve baseline path modes + the linear_subspace override for graph mode ---
     modes_cfg = list(OmegaConf.to_container(analysis.path_modes, resolve=True))
-    composed = featurizer if isinstance(featurizer, ComposedFeaturizer) else None
-    ls_override = resolve_path_modes(["linear_subspace"], composed)[0].featurizer_override
 
     # --- Endpoint pair(s) ---
     selected_pairs = [list(p) for p in analysis.selected_pairs]
@@ -269,7 +265,18 @@ def main(cfg: DictConfig) -> dict[str, Any]:
         for mode in modes_cfg:
             # Build the path + pick the featurizer for this mode.
             if mode == "graph_geodesic":
-                # Restrict the graph to centroids that actually have examples.
+                if raw_centroids is None:
+                    logger.warning(
+                        "Skipping graph_geodesic: no raw_features.safetensors"
+                    )
+                    continue
+                # The ROUTE is selected by the PCA-space graph (denoised neighbor
+                # structure), but STEERING happens in raw activation space — the same
+                # mechanism as the `linear` baseline. So graph_geodesic and linear
+                # differ only by the route (straight vs. through intermediates), which
+                # is exactly the variable we want to isolate. (Steering in the PCA
+                # subspace via an inverse-PCA lift was a no-op: the reconstruction
+                # dropped the off-subspace activation mass and the patch had no effect.)
                 valid_idx = [i for i in range(n_values) if mask[i]]
                 valid_labels = [value_strs[i] for i in valid_idx]
                 valid_centroids = pca_centroids[valid_idx]
@@ -281,8 +288,21 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                     k=graph_k,
                     steps_per_segment=steps_per_segment,
                 )
-                grid_points = route["path_points"].to(device)
-                override = ls_override
+                # Build the piecewise-linear path between the route countries' RAW
+                # centroids (drop duplicate segment boundaries).
+                route_global = [value_strs.index(lbl) for lbl in route["route_labels"]]
+                segs: list[torch.Tensor] = []
+                for a, b in zip(route_global[:-1], route_global[1:]):
+                    alphas = torch.linspace(
+                        0.0, 1.0, steps_per_segment,
+                        device=device, dtype=raw_centroids.dtype,
+                    )
+                    seg = raw_centroids[a].unsqueeze(0) + alphas.unsqueeze(1) * (
+                        raw_centroids[b] - raw_centroids[a]
+                    ).unsqueeze(0)
+                    segs.append(seg if not segs else seg[1:])
+                grid_points = torch.cat(segs, dim=0)
+                override = Featurizer(id="identity")  # steer in raw space, like `linear`
                 route_record[f"{start_label}_{end_label}"] = {
                     "pair": [start_label, end_label],
                     "route_labels": route["route_labels"],
