@@ -9,9 +9,9 @@ task:
   target_variable: country
 activation_manifold:
   method: spline
-  intrinsic_mode: parameter
+  intrinsic_mode: parameter   # canonical (lat, lon) -> a 2-D geographic map
   intrinsic_dim: 2
-  smoothness: 0.0
+  smoothness: 0.0             # raise (e.g. 1.0) for a smoother fit over 30 points
   subspace: pca_k32
   layers: [33]
   token_positions: [last_token]

@@ -9,6 +9,8 @@ task:
   target_variable: country
 path_steering:
   subspace: pca_k32
+  # The L{layer}_{token_position}/spline_s{smoothness} cell written by
+  # activation_manifold above, so the spline featurizer is found.
   activation_manifold: L33_last_token/spline_s0.0
   selected_pairs: [["Spain", "Russia"]]
   path_modes: [geometric, linear]
