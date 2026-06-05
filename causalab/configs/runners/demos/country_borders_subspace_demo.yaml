@@ -1,0 +1,20 @@
+# @package _global_
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: gemma3_4b_pt
+  - /analysis/subspace
+  - _self_
+task:
+  enumerate_all: true # training on all possible examples, test = train
+  target_variable: country
+
+subspace:
+  method: pca
+  # Single layer (no sweep): Gemma 3 4B's final layer, index 33.
+  # Downstream activation_manifold/path_steering cells lock onto this layer.
+  layers: [33]
+  k_features: 32
+  token_positions: [last_token]
+  visualization:
+    figure_format: png

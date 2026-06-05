@@ -1,0 +1,14 @@
+# @package _global_
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: gemma3_4b_pt
+  - /analysis/baseline
+  - _self_
+task:
+  enumerate_all: true # Enumerate all examples in the training set, test = train
+  target_variable: country
+
+baseline:
+  visualization:
+    figure_format: png
