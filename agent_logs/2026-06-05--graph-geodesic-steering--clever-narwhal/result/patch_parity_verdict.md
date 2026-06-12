@@ -83,3 +83,26 @@ bash scripts/run_exp.sh country_borders_patch_parity \
 ```
 
 (arms reduced — parity is settled; more prompts for tighter per-direction stats.)
+
+---
+
+## Addendum: L12/country site validation (2026-06-12, run 3)
+
+Dense locate scan at the `country` token position: L0 peaks (0.29, ≈ token-embedding
+substitution — trivial), decays upward, with a mid-depth bump at L12 (0.22). Subspace
+refit at L12/country → `subspace/pca_k32_ctok`; patch_parity rerun there:
+
+| metric | L33/last_token | **L12/country** | no_patch |
+|---|---|---|---|
+| Spain p_expected_norm | 0.182 | **0.214** | 0.088 |
+| Spain argmax_expected | 0.219 | **0.281** | 0.156 |
+| Russia p_expected_norm | 0.129 | **0.301** | 0.035 |
+| Russia argmax_expected | 0.083 | **0.417** | 0.042 |
+
+Russia is decisive: its 8 neighbors spread across directions, so the L33 frozen
+marginal (final layer ⇒ patch fully determines logits, direction unrecoverable) capped
+argmax_expected at 0.083; L12/country reaches 0.417 — the model re-integrates the
+prompt's direction with the patched subject downstream. p_target_norm also rises to
+~0.13 (subject-echo). **L12/country (`pca_k32_ctok`) is the site for the geometry
+pipeline.** All downstream scoring must use the subject/neighbor-signature readout
+(now implemented in graph_path_steering's `subject_decode_sequence`).

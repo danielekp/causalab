@@ -3,7 +3,16 @@
 A stripped-down sibling of shipped `path_steering` (no criteria/isometry/belief-space
 machinery — just the steering + landscape plot). For a configured endpoint pair it
 builds and steers along up to three paths and records the per-step output distribution
-over the answer-country tokens:
+over the answer-country tokens.
+
+READOUT SEMANTICS (patch_parity verdict, 2026-06-12): the steered variable is the
+question's SUBJECT country; the model answers with its NEIGHBOR
+(raw_output = NEIGHBOR_OF[(country, direction)]). So the per-step answer-token argmax
+shows the route's neighbors, not the route. The analysis therefore decodes each step's
+distribution back to its most-consistent *subject*: score every candidate subject S by
+the answer mass on NEIGHBOR_OF[(S, prompt_direction)], average over prompts, argmax
+over S ("subject_decode_sequence"). Intermediate-coverage is computed on the decoded
+subjects; the raw answer argmax is kept as "answer_argmax_sequence".
 
   - graph_geodesic (new): operates in PCA space using the same featurizer override as
     the shipped `linear_subspace` mode, but the path is the piecewise-linear route from
@@ -60,6 +69,7 @@ from causalab.analyses.path_steering.path_mode import (
 from causalab.analyses.path_steering.path_visualization import (
     plot_saved_pair_distributions,
 )
+from causalab.tasks.country_borders.config import NEIGHBOR_OF
 from causalab.tasks.loader import load_task_counterfactuals
 
 from methods.centroid_graph_geodesic import centroid_graph_geodesic
@@ -101,16 +111,62 @@ def _argmax_country_sequence(
     n_values: int,
     value_strs: list[str],
 ) -> list[str]:
-    """Per-step top-1 country label, averaged over prompts.
+    """Per-step top-1 ANSWER-token label, averaged over prompts.
 
     ``probs`` is (num_steps, n_prompts, W); the first ``n_values`` columns are the
     per-country mass and any trailing column is "other". We argmax over the country
-    columns only.
+    columns only. NOTE: this is the answer the model gives, which under the task's
+    causal model is a NEIGHBOR of the steered subject — use the subject decode below
+    for route coverage.
     """
     mean_probs = probs.float().mean(dim=1)  # (num_steps, W)
     country_probs = mean_probs[:, :n_values]  # drop "other"
     idx = country_probs.argmax(dim=1).tolist()
     return [value_strs[i] for i in idx]
+
+
+def _build_signature_mask(
+    eval_samples: list,
+    value_strs: list[str],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-prompt subject→answer signature mask from the task's neighbor table.
+
+    Returns (M, valid): M is (n_prompts, n_subjects, n_answers) with
+    M[j, S, a] = 1 iff answer-country ``a`` is an in-set neighbor of subject S in
+    prompt j's direction; valid is (n_prompts, n_subjects), False where the
+    (S, direction) cell has no in-set neighbor (excluded from the prompt average).
+    """
+    n_values = len(value_strs)
+    idx_of = {v: i for i, v in enumerate(value_strs)}
+    M = torch.zeros(len(eval_samples), n_values, n_values)
+    for j, s in enumerate(eval_samples):
+        direction = s["input"]["direction"]
+        for S, name in enumerate(value_strs):
+            for nb in NEIGHBOR_OF.get((name, direction), []):
+                if nb in idx_of:
+                    M[j, S, idx_of[nb]] = 1.0
+    return M, M.sum(dim=-1) > 0
+
+
+def _subject_signature_decode(
+    probs: torch.Tensor,
+    sig_mask: torch.Tensor,
+    sig_valid: torch.Tensor,
+    n_values: int,
+    value_strs: list[str],
+) -> tuple[list[str], torch.Tensor]:
+    """Decode each step's answer distribution to its most-consistent subject.
+
+    signature[t, S] = mean over prompts j (with a non-empty (S, direction_j) cell) of
+    the answer mass on NEIGHBOR_OF[(S, direction_j)]. Returns (per-step argmax subject
+    labels, the full (num_steps, n_subjects) signature matrix).
+    """
+    ans = probs.float()[:, :, :n_values]  # (T, P, A) — drop "other"
+    sig = torch.einsum("tpa,psa->tps", ans, sig_mask)  # (T, P, S)
+    counts = sig_valid.float().sum(dim=0).clamp(min=1)  # (S,)
+    mean_sig = (sig * sig_valid.float().unsqueeze(0)).sum(dim=1) / counts  # (T, S)
+    seq = [value_strs[i] for i in mean_sig.argmax(dim=1).tolist()]
+    return seq, mean_sig
 
 
 def main(cfg: DictConfig) -> dict[str, Any]:
@@ -247,6 +303,9 @@ def main(cfg: DictConfig) -> dict[str, Any]:
 
     modes_cfg = list(OmegaConf.to_container(analysis.path_modes, resolve=True))
 
+    # --- Subject-signature decode mask (corrected readout; see module docstring) ---
+    sig_mask, sig_valid = _build_signature_mask(eval_samples, value_strs)
+
     # --- Endpoint pair(s) ---
     selected_pairs = [list(p) for p in analysis.selected_pairs]
 
@@ -274,9 +333,10 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                 # structure), but STEERING happens in raw activation space — the same
                 # mechanism as the `linear` baseline. So graph_geodesic and linear
                 # differ only by the route (straight vs. through intermediates), which
-                # is exactly the variable we want to isolate. (Steering in the PCA
-                # subspace via an inverse-PCA lift was a no-op: the reconstruction
-                # dropped the off-subspace activation mass and the patch had no effect.)
+                # is exactly the variable we want to isolate. (patch_parity confirmed
+                # the raw-space executor is exact; the earlier "inverse-PCA lift was a
+                # no-op" rationale was wrong — the inverse featurizer re-adds the
+                # off-subspace error term.)
                 valid_idx = [i for i in range(n_values) if mask[i]]
                 valid_labels = [value_strs[i] for i in valid_idx]
                 valid_centroids = pca_centroids[valid_idx]
@@ -344,15 +404,24 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                 for u in interchange_target.flatten():
                     u.set_featurizer(featurizer)
 
-            # Per-mode coverage: distinct intermediate countries that become argmax.
-            seq = _argmax_country_sequence(probs, n_values, value_strs)
+            # Per-mode coverage. Route coverage is computed on the DECODED SUBJECT
+            # sequence (which subject is most consistent with the answers), not on
+            # the raw answer argmax — see module docstring.
+            ans_seq = _argmax_country_sequence(probs, n_values, value_strs)
+            subj_seq, sig_matrix = _subject_signature_decode(
+                probs, sig_mask, sig_valid, n_values, value_strs
+            )
             intermediates = [
-                c for c in dict.fromkeys(seq) if c not in (start_label, end_label)
+                c for c in dict.fromkeys(subj_seq) if c not in (start_label, end_label)
             ]
             coverage.setdefault(f"{start_label}_{end_label}", {})[mode] = {
-                "argmax_sequence": seq,
-                "n_intermediate_argmax": len(intermediates),
-                "intermediate_countries": intermediates,
+                "subject_decode_sequence": subj_seq,
+                "n_intermediate_subjects": len(intermediates),
+                "intermediate_subjects": intermediates,
+                "answer_argmax_sequence": ans_seq,
+                "subject_signature_matrix": [
+                    [round(x, 6) for x in row] for row in sig_matrix.tolist()
+                ],
             }
 
             # Landscape plot for this mode/pair.
@@ -370,11 +439,14 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                 figure_format=figure_fmt,
             )
             logger.info(
-                "%s [%s->%s]: %d intermediate argmax countries",
+                "%s [%s->%s]: subjects %s | %d intermediates",
                 mode,
                 start_label,
                 end_label,
-                coverage[f"{start_label}_{end_label}"][mode]["n_intermediate_argmax"],
+                " > ".join(dict.fromkeys(subj_seq)),
+                coverage[f"{start_label}_{end_label}"][mode][
+                    "n_intermediate_subjects"
+                ],
             )
 
     # --- Persist route + coverage + metadata (json; no causalab.io tensor outputs) ---

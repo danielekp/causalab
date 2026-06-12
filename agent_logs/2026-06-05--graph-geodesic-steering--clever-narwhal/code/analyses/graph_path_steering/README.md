@@ -61,18 +61,26 @@ graph_path_steering:
 - **`route.json`** — the Dijkstra country chain (Spain → … → Russia) for `graph_geodesic`, with per-edge
   lengths and the final `k_used`. A sensible chain of bordering countries supports H1; a single long jump
   or non-adjacent hops falsifies it.
-- **`intermediate_coverage.json`** — per path mode, the ordered top-1 country at each step
-  (`argmax_sequence`) and `n_intermediate_argmax` (distinct route countries other than the endpoints that
-  become argmax). `graph_geodesic` having more intermediates than `geometric`/`linear` supports H2/H3.
-- **`vis/paths/<mode>/pair_Spain_Russia.png`** — output-probability landscape along each path. Look for a
-  contiguous hand-off of mass between adjacent countries (graph_geodesic) vs an abrupt Spain→Russia jump
-  (linear).
+- **`intermediate_coverage.json`** — per path mode (corrected readout, patch_parity verdict 2026-06-12:
+  the steered variable is the question's *subject*; the model answers with its *neighbor*, so route
+  coverage must be decoded, not read off the answer tokens):
+  - `subject_decode_sequence` — per step, the subject S whose neighbor signature
+    `NEIGHBOR_OF[(S, prompt_direction)]` best matches the answer distribution (prompt-averaged). This is
+    the route as the model "understood" it; `n_intermediate_subjects` / `intermediate_subjects` count
+    decoded subjects other than the endpoints. `graph_geodesic` having more intermediate subjects than
+    `geometric`/`linear` supports H2/H3.
+  - `answer_argmax_sequence` — the raw top-1 answer token per step (the model's actual answers; under a
+    working steer these are *neighbors* of the route, not the route).
+  - `subject_signature_matrix` — (num_steps × 30) prompt-averaged signature mass per candidate subject,
+    for plotting the hand-off directly.
+- **`vis/paths/<mode>/pair_Spain_Russia.png`** — output-probability landscape along each path (answer
+  tokens — read it as the neighbor shadow of the route).
 
 ### Saved artifacts
 
 | File | Shape / Format | Used by |
 |---|---|---|
 | `route.json` | `{ "<start>_<end>": {pair, route_labels, segment_lengths, k_used} }` | `/interpret-experiment` |
-| `intermediate_coverage.json` | `{ "<start>_<end>": { "<mode>": {argmax_sequence, n_intermediate_argmax, intermediate_countries} } }` | `/interpret-experiment` |
+| `intermediate_coverage.json` | `{ "<start>_<end>": { "<mode>": {subject_decode_sequence, n_intermediate_subjects, intermediate_subjects, answer_argmax_sequence, subject_signature_matrix} } }` | `/interpret-experiment` |
 | `vis/paths/<mode>/pair_<start>_<end>.png` | matplotlib landscape | human reference |
 | `metadata.json` | run-config snapshot | provenance |
