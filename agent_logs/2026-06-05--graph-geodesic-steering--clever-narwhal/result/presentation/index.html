@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Walking the Map Inside Gemma — a steering post-mortem &amp; a geometric result</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0b1020;
+  --ink2:#0e1530;
+  --panel:#101936;
+  --line:rgba(236,228,206,.13);
+  --line2:rgba(236,228,206,.28);
+  --cream:#ece4ce;
+  --cream-dim:#b9b09a;
+  --cream-faint:#7e7a6d;
+  --amber:#e8a33d;       /* geometric — the manifold geodesic */
+  --teal:#41b8ad;        /* oracle — true-border route */
+  --rust:#c2553f;        /* linear — straight chord */
+  --violet:#9a86d8;      /* graph — k-NN dijkstra */
+  --echo:#d8689a;
+  --good:#7fc97f;
+  --maxw:1060px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ink);
+  color:var(--cream);
+  font-family:"Fraunces",Georgia,serif;
+  font-weight:340;
+  line-height:1.62;
+  overflow-x:hidden;
+}
+body::before{ /* grain */
+  content:"";position:fixed;inset:0;z-index:999;pointer-events:none;opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+body::after{ /* vignette */
+  content:"";position:fixed;inset:0;z-index:998;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 30%,transparent 55%,rgba(4,6,14,.55));
+}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+a{color:var(--teal);text-decoration:none;border-bottom:1px solid rgba(65,184,173,.35)}
+a:hover{border-bottom-color:var(--teal)}
+
+/* ---------- chrome ---------- */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:50;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:.65rem 1.4rem;
+  background:linear-gradient(rgba(11,16,32,.92),rgba(11,16,32,.75) 70%,transparent);
+  backdrop-filter:blur(3px);
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.14em;
+  color:var(--cream-dim);text-transform:uppercase;
+}
+nav .dots a{border:0;color:var(--cream-faint);margin-left:1.1rem}
+nav .dots a:hover{color:var(--amber)}
+
+section{position:relative;padding:7rem 1.5rem 5rem;max-width:var(--maxw);margin:0 auto}
+.rule{border:0;border-top:1px solid var(--line);max-width:var(--maxw);margin:0 auto}
+
+.exhibit{
+  font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.32em;
+  text-transform:uppercase;color:var(--amber);
+  display:flex;align-items:center;gap:1rem;margin-bottom:1.6rem;
+}
+.exhibit::after{content:"";flex:1;height:1px;background:var(--line)}
+.exhibit .n{color:var(--cream-faint)}
+
+h2{
+  font-size:clamp(1.9rem,4vw,3rem);font-weight:560;line-height:1.08;
+  letter-spacing:-.015em;margin-bottom:1.4rem;max-width:18ch;
+}
+h2 em{font-style:italic;font-weight:380;color:var(--amber)}
+.lede{font-size:1.12rem;max-width:62ch;color:var(--cream-dim)}
+.lede strong{color:var(--cream);font-weight:560}
+p.body{max-width:62ch;color:var(--cream-dim);margin-top:1rem}
+p.body strong{color:var(--cream);font-weight:560}
+.kicker-num{
+  font-family:"IBM Plex Mono",monospace;
+  font-size:clamp(2.6rem,7vw,4.6rem);font-weight:300;letter-spacing:-.04em;line-height:1;
+}
+
+/* ---------- hero ---------- */
+header{
+  position:relative;min-height:100vh;display:flex;flex-direction:column;
+  justify-content:center;padding:6rem 1.5rem 4rem;overflow:hidden;
+}
+#heromap{position:absolute;inset:0;width:100%;height:100%;opacity:.5}
+.hero-inner{position:relative;max-width:var(--maxw);margin:0 auto;width:100%}
+.hero-tag{
+  font-family:"IBM Plex Mono",monospace;font-size:.7rem;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--teal);margin-bottom:1.8rem;
+  animation:rise .9s .1s both;
+}
+h1{
+  font-size:clamp(2.6rem,7.4vw,5.6rem);font-weight:600;line-height:1.0;letter-spacing:-.025em;
+  max-width:14ch;animation:rise .9s .25s both;
+}
+h1 .it{font-style:italic;font-weight:340;color:var(--amber)}
+.hero-sub{
+  margin-top:2rem;font-size:1.16rem;max-width:56ch;color:var(--cream-dim);
+  animation:rise .9s .45s both;
+}
+.hero-sub strong{color:var(--cream)}
+.meta-strip{
+  margin-top:3rem;display:flex;flex-wrap:wrap;gap:2.4rem;
+  font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--cream-faint);
+  letter-spacing:.06em;animation:rise .9s .65s both;
+}
+.meta-strip b{display:block;color:var(--cream-dim);font-weight:500;margin-bottom:.15rem}
+.scrollcue{
+  position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);
+  font-family:"IBM Plex Mono",monospace;font-size:.62rem;letter-spacing:.3em;color:var(--cream-faint);
+  animation:bob 2.4s ease-in-out infinite;
+}
+@keyframes rise{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+@keyframes bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,8px)}}
+
+/* ---------- generic panels ---------- */
+.panel{
+  background:linear-gradient(160deg,var(--panel),var(--ink2));
+  border:1px solid var(--line);border-radius:4px;padding:1.5rem;
+}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.4rem;margin-top:2.4rem}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.figcap{
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--cream-faint);
+  letter-spacing:.05em;margin-top:.9rem;line-height:1.7;
+}
+.figcap b{color:var(--cream-dim);font-weight:500}
+
+.reveal{opacity:0;transform:translateY(30px);transition:opacity .8s ease,transform .8s ease}
+.reveal.vis{opacity:1;transform:none}
+
+/* ---------- the anomaly ---------- */
+.vs{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:1.6rem;
+  margin:2.6rem 0;
+}
+.vs .cell{text-align:center}
+.vs .word{
+  font-family:"IBM Plex Mono",monospace;font-size:.7rem;letter-spacing:.3em;color:var(--cream-faint);
+  text-transform:uppercase;
+}
+.vs .cell .kicker-num.hot{color:var(--amber)}
+.vs .cell .kicker-num.cold{color:var(--rust)}
+.vs .cell .sub{font-family:"IBM Plex Mono",monospace;font-size:.66rem;color:var(--cream-faint);margin-top:.5rem;letter-spacing:.05em}
+@media(max-width:680px){.vs{grid-template-columns:1fr}}
+
+/* ---------- chips / controls ---------- */
+.chips{display:flex;flex-wrap:wrap;gap:.5rem;margin:.4rem 0 1rem}
+.chip{
+  font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.08em;
+  border:1px solid var(--line2);color:var(--cream-dim);background:transparent;
+  padding:.38rem .85rem;border-radius:999px;cursor:pointer;transition:all .2s;
+  display:inline-flex;align-items:center;gap:.45rem;
+}
+.chip .dot{width:.55em;height:.55em;border-radius:50%;background:var(--cream-faint)}
+.chip:hover{border-color:var(--cream-dim);color:var(--cream)}
+.chip.on{border-color:var(--cream);color:var(--ink);background:var(--cream)}
+.chip.on .dot{outline:2px solid rgba(11,16,32,.4)}
+
+/* ---------- stat cards ---------- */
+.stat-row{display:flex;flex-wrap:wrap;gap:1rem;margin-top:1.2rem}
+.stat{
+  border:1px solid var(--line);border-radius:4px;padding:.8rem 1.1rem;min-width:9.5rem;flex:1;
+  background:rgba(16,25,54,.5);
+}
+.stat .lab{font-family:"IBM Plex Mono",monospace;font-size:.6rem;letter-spacing:.18em;text-transform:uppercase;color:var(--cream-faint)}
+.stat .val{font-family:"IBM Plex Mono",monospace;font-size:1.5rem;font-weight:300;margin-top:.2rem}
+
+/* ---------- ribbon (sequence) ---------- */
+.ribbon{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin-top:1rem;min-height:2rem}
+.rib{
+  font-family:"IBM Plex Mono",monospace;font-size:.66rem;padding:.22rem .6rem;border-radius:3px;
+  border:1px solid var(--line2);color:var(--cream-dim);position:relative;
+}
+.rib.endpoint{border-color:var(--cream);color:var(--cream)}
+.rib .cnt{color:var(--cream-faint);font-size:.58rem;margin-left:.3rem}
+.rib-arrow{color:var(--cream-faint);font-size:.7rem}
+.rib-arrow.broken{color:var(--rust);font-weight:600}
+
+/* ---------- tables ---------- */
+table{border-collapse:collapse;width:100%;font-family:"IBM Plex Mono",monospace;font-size:.74rem}
+th,td{padding:.55rem .7rem;text-align:left;border-bottom:1px solid var(--line)}
+th{font-weight:500;font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:var(--cream-faint)}
+td{color:var(--cream-dim)}
+td.hl{color:var(--amber);font-weight:600}
+td.num{font-variant-numeric:tabular-nums}
+
+.stamp{
+  display:inline-block;transform:rotate(-3deg);
+  font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:.78rem;letter-spacing:.34em;
+  color:var(--good);border:2px solid var(--good);border-radius:3px;
+  padding:.4rem 1rem;text-transform:uppercase;opacity:.92;
+}
+.codebox{
+  font-family:"IBM Plex Mono",monospace;font-size:.72rem;line-height:1.8;
+  background:rgba(5,8,18,.7);border:1px solid var(--line);border-radius:4px;
+  padding:1rem 1.2rem;color:var(--cream-dim);overflow-x:auto;white-space:pre;
+}
+.codebox .c{color:var(--cream-faint)}
+.codebox .a{color:var(--amber)}.codebox .t{color:var(--teal)}.codebox .r{color:var(--rust)}
+
+/* implications */
+.imp{display:grid;grid-template-columns:auto 1fr;gap:1.3rem;margin-top:2.2rem;max-width:46rem}
+.imp .roman{font-family:"IBM Plex Mono",monospace;color:var(--amber);font-size:.8rem;padding-top:.35rem;letter-spacing:.1em}
+.imp h3{font-size:1.18rem;font-weight:560;margin-bottom:.35rem;letter-spacing:-.01em}
+.imp p{color:var(--cream-dim);font-size:.97rem;max-width:58ch}
+.imp p strong{color:var(--cream)}
+
+footer{
+  padding:4rem 1.5rem 5rem;max-width:var(--maxw);margin:0 auto;
+  font-family:"IBM Plex Mono",monospace;font-size:.68rem;color:var(--cream-faint);line-height:2;
+}
+footer b{color:var(--cream-dim);font-weight:500}
+
+svg text{user-select:none}
+.legend{display:flex;flex-wrap:wrap;gap:1.2rem;font-family:"IBM Plex Mono",monospace;font-size:.64rem;color:var(--cream-dim);margin-top:.8rem}
+.legend span{display:inline-flex;align-items:center;gap:.4rem}
+.legend i{width:1.2em;height:3px;border-radius:2px;display:inline-block}
+</style>
+</head>
+<body>
+
+<nav>
+  <span>CAUSALAB · SESSION CLEVER-NARWHAL · 2026-06-12</span>
+  <span class="dots">
+    <a href="#anomaly">anomaly</a><a href="#parity">parity</a><a href="#twist">twist</a><a href="#site">site</a><a href="#traversal">traversal</a><a href="#control">control</a><a href="#meaning">meaning</a>
+  </span>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header>
+  <svg id="heromap" preserveAspectRatio="xMidYMid slice"></svg>
+  <div class="hero-inner">
+    <div class="hero-tag">A steering post-mortem &amp; a geometric result · Gemma3-4B-PT</div>
+    <h1>Walking the map <span class="it">inside</span> the model</h1>
+    <p class="hero-sub">
+      A steering pipeline that read as <strong>completely broken</strong> — every landscape at the 1/30 chance
+      floor — turned out to be working perfectly. The probe was asking the wrong question.
+      Once the readout was fixed and the site moved off the final layer, paths through activation space
+      began decoding as <strong>journeys across Europe</strong>: contiguous chains of countries,
+      in geographic order, deep enough in the network that the model still <em>computes</em> with every step.
+    </p>
+    <div class="meta-strip">
+      <div><b>MODEL</b>google/gemma-3-4b-pt · bf16</div>
+      <div><b>TASK</b>country_borders · 30 countries × 8 directions</div>
+      <div><b>SITE</b>layer 12 · subject-token residual</div>
+      <div><b>RUNS</b>8 · patch_parity → geodesics → shuffle control</div>
+    </div>
+  </div>
+  <div class="scrollcue">SCROLL ▾</div>
+</header>
+
+<hr class="rule">
+
+<!-- ============ 01 ANOMALY ============ -->
+<section id="anomaly">
+  <div class="exhibit"><span class="n">EXHIBIT 01</span><span>THE ANOMALY</span></div>
+  <h2>Same patch, same site, <em>two verdicts</em></h2>
+  <p class="lede">
+    The task: <span class="mono" style="font-size:.85em">“Q: Which country lies to the {direction} of {country}? A:”</span>.
+    A locate scan said patching a country centroid at L33/last_token flips the model's answer with score
+    <strong>0.41</strong>. The steering executor, patching <strong>the same centroid at the same site</strong>,
+    produced landscapes flat at <strong>0.033 — exactly 1/30</strong>. One mechanism cannot be both causal and inert.
+  </p>
+
+  <div class="vs reveal">
+    <div class="cell">
+      <div class="kicker-num hot">0.41</div>
+      <div class="sub">locate · centroid interchange<br>string-match accuracy</div>
+    </div>
+    <div class="word">·· versus ··</div>
+    <div class="cell">
+      <div class="kicker-num cold">0.033</div>
+      <div class="sub">steering executor · same patch<br>= 1/30 = chance</div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel reveal">
+      <svg id="heatmap" viewBox="0 0 460 330" width="100%"></svg>
+      <div class="figcap"><b>Locate scan, intervention score by (layer × token position).</b>
+      Two loci: answer formation at late last_token (peaking 0.41 at L33 — the final layer), and the
+      <b>subject-entity representation</b> at the country token, early-to-mid depth. The 0.41 cell is bait.</div>
+    </div>
+    <div class="panel reveal" style="display:flex;flex-direction:column;justify-content:center">
+      <p class="body" style="margin-top:0">Two confounded hypotheses were on the table:</p>
+      <p class="body"><strong>H-bug</strong> — the steering executor silently drops the patch
+      (a suspected <span class="mono" style="font-size:.85em">(B,1,H)</span> vs <span class="mono" style="font-size:.85em">(B,H)</span> rank
+      mismatch in its <span class="mono" style="font-size:.85em">replace_fn</span>).</p>
+      <p class="body"><strong>H-readout</strong> — both executors work and the flat landscapes are an artifact
+      of how success is measured.</p>
+      <p class="body">A four-arm A/B (<span class="mono" style="font-size:.85em">patch_parity</span>) was built to separate them:
+      locate's mechanism, a verbatim replica of the steering executor, a shape-fixed variant, and a no-patch floor —
+      same centroids, same prompts, same readout.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============ 02 PARITY ============ -->
+<section id="parity">
+  <div class="exhibit"><span class="n">EXHIBIT 02</span><span>THE EXONERATION</span></div>
+  <h2>Bit-identical: the executor <em>never was broken</em></h2>
+  <p class="lede">
+    All three patch arms returned <strong>numerically identical distributions, to the last decimal</strong>,
+    for both test countries. The gathered representation was already rank-2 — the suspected mismatch does not exist.
+  </p>
+
+  <div class="grid2">
+    <div class="panel reveal">
+      <table>
+        <thead><tr><th>arm</th><th>mechanism</th><th>p(Spain) · Spain patch</th></tr></thead>
+        <tbody>
+          <tr><td>interchange_source</td><td>locate's path</td><td class="num">0.0320415124297142</td></tr>
+          <tr><td>interpolation_replica</td><td>steering executor, verbatim</td><td class="num">0.0320415124297142</td></tr>
+          <tr><td>interpolation_shapefix</td><td>rank-fixed variant</td><td class="num">0.0320415124297142</td></tr>
+          <tr><td>no_patch</td><td>floor</td><td class="num">0.0036029438488185</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:1.4rem"><span class="stamp">Executor exonerated</span></div>
+    </div>
+    <div class="panel reveal">
+      <div class="codebox">shape_probe
+  f_base_shape     <span class="t">[16, 2560]</span>   <span class="c">← already (B, H); no rank mismatch</span>
+  f_src_shape      <span class="t">[16, 2560]</span>
+  target_shape     <span class="t">[2560]</span>
+  replica_out      <span class="t">[16, 2560]</span>   <span class="c">≡ shapefix_out</span></div>
+      <p class="body">But look at the number that survived: with Spain patched in, p(Spain) is <strong>0.032 ≈ 1/30</strong>.
+      The patch had a large, reproducible effect — three independent mechanisms agree — and the target token still sat at chance.
+      The effect went <em>somewhere else</em>.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============ 03 TWIST ============ -->
+<section id="twist">
+  <div class="exhibit"><span class="n">EXHIBIT 03</span><span>THE TWIST</span></div>
+  <h2>The variable is the <em>question</em>, not the answer</h2>
+  <p class="lede">
+    The causal model is <span class="mono" style="font-size:.85em">raw_output&nbsp;=&nbsp;NEIGHBOR_OF[(country,&nbsp;direction)]</span> —
+    <strong><code class="mono" style="font-size:.9em">country</code> is the question's subject</strong>, and the correct answer is one of its
+    <em>neighbors</em>. Patch Spain into the residual stream and a working model should answer
+    <strong>Portugal</strong> or <strong>France</strong> — never “Spain”. Every landscape, the reconstruction test, and the
+    path-steering scorer were watching a token that is wrong by construction.
+  </p>
+
+  <div class="panel reveal" style="margin-top:2.4rem">
+    <div class="chips" id="distChips"></div>
+    <svg id="distChart" viewBox="0 0 980 320" width="100%"></svg>
+    <div class="figcap" id="distCap"></div>
+  </div>
+
+  <p class="body" style="margin-top:2rem">
+    This single reading resolves the whole anomaly: locate's string-match scored against the counterfactual's
+    <em>expected output</em> — the neighbor — so it saw the effect (0.41). The steering stack scored
+    p(patched-country token) — never the right answer — so it saw the floor. <strong>Same mechanism, same effect, two readouts.</strong>
+    The corrected metric is the <em>neighbor-signature</em>: mass on
+    <span class="mono" style="font-size:.85em">NEIGHBOR_OF[(steered_subject, prompt_direction)]</span>, per prompt.
+  </p>
+</section>
+
+<hr class="rule">
+
+<!-- ============ 04 SITE ============ -->
+<section id="site">
+  <div class="exhibit"><span class="n">EXHIBIT 04</span><span>THE SITE</span></div>
+  <h2>The final layer can't <em>compute</em> — L12 can</h2>
+  <p class="lede">
+    L33 is the last decoder layer: a full-residual patch at last_token <strong>fully determines the logits</strong>.
+    The output freezes to the centroid's direction-marginal — there is no computation left to re-read the prompt's
+    direction. The right home for the subject variable is mid-depth, at the <strong>country token itself</strong>,
+    with ~20 layers of attention still downstream.
+  </p>
+
+  <div class="grid2">
+    <div class="panel reveal">
+      <svg id="siteChart" viewBox="0 0 460 300" width="100%"></svg>
+      <div class="figcap"><b>Direction-aware success (argmax on the expected-neighbor set), 64 prompts.</b>
+      Russia is the decisive case: 8 neighbors spread across directions — a frozen marginal can rarely pick the right one
+      (0.083 at L33). At L12/country the model re-integrates the prompt's direction with the patched subject: <b>0.417, 10× floor</b>.</div>
+    </div>
+    <div class="panel reveal" style="display:flex;flex-direction:column;justify-content:center">
+      <table>
+        <thead><tr><th></th><th>floor</th><th>L33 · last_tok</th><th>L12 · country</th></tr></thead>
+        <tbody>
+          <tr><td>Spain · p(expected)</td><td class="num">0.088</td><td class="num">0.182</td><td class="num hl">0.214</td></tr>
+          <tr><td>Spain · argmax</td><td class="num">0.156</td><td class="num">0.219</td><td class="num hl">0.281</td></tr>
+          <tr><td>Russia · p(expected)</td><td class="num">0.035</td><td class="num">0.129</td><td class="num hl">0.301</td></tr>
+          <tr><td>Russia · argmax</td><td class="num">0.042</td><td class="num">0.083</td><td class="num hl">0.417</td></tr>
+        </tbody>
+      </table>
+      <p class="body">A locate scan along the country-token column peaks at L0 (0.29) — but L0 is the token embedding:
+      patching it is just <em>rewriting the prompt</em>. The mid-depth bump at <strong>L12 (0.22)</strong> is the enriched
+      entity representation, causally consumed downstream. That cell becomes the home for everything that follows.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============ 05 TRAVERSAL ============ -->
+<section id="traversal">
+  <div class="exhibit"><span class="n">EXHIBIT 05</span><span>THE TRAVERSAL</span></div>
+  <h2>Four ways to cross Europe in <em>activation space</em></h2>
+  <p class="lede">
+    A 2-D thin-plate-spline manifold is fit over the 30 L12 country centroids, charted by capital (lat, lon).
+    Between two endpoint countries we walk four paths and, at every step, <strong>decode the patched activation back to a
+    subject</strong> via its neighbor-signature (echo-augmented). The decoded itinerary — not the answer tokens —
+    is the route as the model understood it.
+  </p>
+
+  <div class="panel reveal" style="margin-top:2.4rem">
+    <div style="display:flex;flex-wrap:wrap;gap:2rem;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="figcap" style="margin:0 0 .3rem">ENDPOINTS</div>
+        <div class="chips" id="pairChips"></div>
+      </div>
+      <div>
+        <div class="figcap" style="margin:0 0 .3rem">PATH MODE</div>
+        <div class="chips" id="modeChips"></div>
+      </div>
+      <div>
+        <div class="figcap" style="margin:0 0 .3rem">&nbsp;</div>
+        <button class="chip" id="replayBtn">⟳ replay</button>
+      </div>
+    </div>
+    <svg id="bigmap" viewBox="0 0 760 480" width="100%"></svg>
+    <div class="legend">
+      <span><i style="background:var(--amber)"></i> geometric — manifold geodesic (endpoints only)</span>
+      <span><i style="background:var(--teal)"></i> oracle — true-border route, supplied</span>
+      <span><i style="background:var(--rust)"></i> linear — straight chord</span>
+      <span><i style="background:var(--violet)"></i> graph — k-NN Dijkstra route</span>
+      <span><i style="background:rgba(236,228,206,.25);height:1px"></i> true borders (task table)</span>
+    </div>
+    <div class="ribbon" id="ribbon"></div>
+    <div class="stat-row">
+      <div class="stat"><div class="lab">decoded itinerary</div><div class="val" id="statChain">—</div></div>
+      <div class="stat"><div class="lab">intermediate subjects</div><div class="val" id="statInter">—</div></div>
+      <div class="stat"><div class="lab">border-contiguous hops</div><div class="val" id="statContig">—</div></div>
+    </div>
+    <div class="figcap" id="mapCap"></div>
+  </div>
+
+  <div class="imp">
+    <div class="roman">F1</div>
+    <div><h3>The geodesic walks the corridor — unsupplied</h3>
+    <p>Given <strong>only two endpoints</strong>, the manifold geodesic decodes a contiguous, geographically ordered
+    chain on all four pairs — including the Mediterranean crossing Portugal→Greece, where the great-circle path goes by
+    sea (Spain · France · Italy · Greece) rather than the land detour. Intermediate points of the chart decode to
+    <em>working representations</em> of intermediate countries.</p></div>
+    <div class="roman">F2</div>
+    <div><h3>Raw space replays a supplied route exactly</h3>
+    <p>The oracle mode (piecewise-linear through true-border centroids) recovers <strong>every control point in order</strong>,
+    through the 8-edge Portugal→Greece route. Steering and decode fidelity are not the bottleneck.</p></div>
+    <div class="roman">F3</div>
+    <div><h3>The chord jumps; the graph routes through nonsense</h3>
+    <p>The straight line always skips the middle in one hop (Spain→Ukraine; Bulgaria→Denmark). And the k-NN graph
+    over PCA centroids — H3's premise — has border-edge precision <strong>0.27</strong>: it routes Greece→Norway
+    through <em>Iberia</em>. Geographic adjacency is not recoverable from raw activation distances,
+    even though geographic traversal works when the chart is supplied.</p></div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- ============ 06 CONTROL ============ -->
+<section id="control">
+  <div class="exhibit"><span class="n">EXHIBIT 06</span><span>THE CONTROL</span></div>
+  <h2>Shuffle the chart, <em>lose the geography</em></h2>
+  <p class="lede">
+    Could the sweep be a property of thin-plate-spline interpolation — any path between 30 centroids passing near
+    other centroids? Refit the manifold with <strong>country↔(lat,lon) assignment permuted</strong>
+    and re-run the geodesics. The intermediate <em>counts</em> survive. The geographic <em>order</em> does not.
+  </p>
+
+  <div class="grid2">
+    <div class="panel reveal">
+      <div class="figcap" style="margin:0 0 .4rem">CANONICAL CHART · <span style="color:var(--amber)">geometric</span>, Spain→Russia</div>
+      <svg class="minimap" id="mapCanon" viewBox="0 0 460 330" width="100%"></svg>
+      <div class="ribbon" id="ribCanon"></div>
+    </div>
+    <div class="panel reveal">
+      <div class="figcap" style="margin:0 0 .4rem">SHUFFLED CHART (seed 0) · geometric, Spain→Russia</div>
+      <svg class="minimap" id="mapShuf" viewBox="0 0 460 330" width="100%"></svg>
+      <div class="ribbon" id="ribShuf"></div>
+    </div>
+  </div>
+
+  <div class="vs reveal">
+    <div class="cell">
+      <div class="kicker-num hot">0.78</div>
+      <div class="sub">border-contiguity, canonical<br>18 / 23 decoded transitions · 4 pairs</div>
+    </div>
+    <div class="word">·· versus ··</div>
+    <div class="cell">
+      <div class="kicker-num cold">0.38</div>
+      <div class="sub">shuffled chart<br>8 / 21 · ≈ the k-NN border recall</div>
+    </div>
+  </div>
+
+  <p class="body">
+    The shuffled chains contain jumps no geography permits — Greece→Denmark, Spain→Poland — while canonical breaks are
+    benign (Italy→Greece is the sea). And the residual 0.38 is not noise: it matches the representation's own k-NN
+    border recall. <strong>What the shuffle removes is exactly the chart-alignment; what remains is the representation's
+    own neighbor structure.</strong> The geodesic result is a property of the model's geometry, not of the spline.
+  </p>
+</section>
+
+<hr class="rule">
+
+<!-- ============ 07 MEANING ============ -->
+<section id="meaning">
+  <div class="exhibit"><span class="n">EXHIBIT 07</span><span>THE MEANING</span></div>
+  <h2>What this changes, <em>and what it doesn't</em></h2>
+
+  <div class="imp">
+    <div class="roman">I</div>
+    <div><h3>Readout semantics is a first-class failure mode</h3>
+    <p>A fully correct intervention pipeline read as totally broken for an entire investigation because the metric
+    scored the intervened <em>variable</em> where the task emits its <em>consequence</em>. Before debugging executors,
+    derive the expected observable from the causal model — here, one line:
+    <span class="mono" style="font-size:.85em">raw_output = NEIGHBOR_OF[(country, direction)]</span>.</p></div>
+
+    <div class="roman">II</div>
+    <div><h3>“It steers” is site-relative</h3>
+    <p>The same centroid patch is trivial at L33 (writes the answer's marginal; direction unrecoverable),
+    lexical at L0 (rewrites the prompt token), and <strong>computational at L12</strong> — where downstream attention
+    re-binds the patched subject to the prompt's direction. Causal scores without a computation budget
+    at the site are not comparable.</p></div>
+
+    <div class="roman">III</div>
+    <div><h3>Geometry lives in charts, not distances</h3>
+    <p>The representation supports a smooth 2-D geographic chart — geodesics decode as journeys — yet its raw metric
+    does not encode the border graph (precision 0.27). Concept geometry can be <strong>chart-alignable without being
+    distance-recoverable</strong>: a caution for k-NN-based structure discovery, and a use-case for parameterized
+    manifolds over unsupervised graphs.</p></div>
+
+    <div class="roman">IV</div>
+    <div><h3>Interpolation between concepts is causally meaningful</h3>
+    <p>Points <em>between</em> training concepts on the manifold are not garbage: they decode to other concepts'
+    working representations, ordered by the chart. The 30 countries behave like samples from a continuous
+    geographic surface the model can compute with anywhere along it.</p></div>
+  </div>
+
+  <p class="body" style="margin-top:2.6rem"><strong>Stated limits.</strong> One model (Gemma3-4B-PT), one site, one seed,
+  16 prompts per step; the lat/lon chart is supplied to the spline (the claim is alignment, not unsupervised discovery —
+  the shuffle control separates exactly this); TPS at ambient dim 32 warns on conditioning; Norway never decodes as
+  itself (its signature is dominated by Sweden/Finland) and mutual-neighbor endpoints flicker (Portugal↔Spain).
+  One shuffle seed so far; a null distribution over permutations is the obvious hardening.</p>
+</section>
+
+<hr class="rule">
+
+<footer>
+  <b>PROVENANCE.</b> causalab session <span style="color:var(--cream-dim)">2026-06-05--graph-geodesic-steering--clever-narwhal</span> · branch pr/country-borders-gemma3-4b ·
+  runs 1–8 (patch_parity ×3, locate scan, manifold fits ×2, graph_path_steering ×3) · 2026-06-12.<br>
+  <b>METHODS.</b> pyvene interchange &amp; interpolation interventions · PCA-32 subspace + thin-plate-spline manifold (intrinsic = capital lat/lon) ·
+  neighbor-signature decode, echo-augmented · k-NN(4) Dijkstra routes · BFS oracle routes over the task border table.<br>
+  <b>FULL RECORD.</b> result/REPORT.md · result/patch_parity_verdict.md · all numbers on this page are from the session logs verbatim.
+</footer>
+
+<script>
+/* ================= DATA ================= */
+const CAP = {"France":[48.86,2.35],"Italy":[41.9,12.5],"Spain":[40.42,-3.7],"Portugal":[38.72,-9.14],"Romania":[44.43,26.1],"Germany":[52.52,13.41],"Netherlands":[52.37,4.9],"Belgium":[50.85,4.35],"Austria":[48.21,16.37],"Switzerland":[46.95,7.45],"Norway":[59.91,10.75],"Sweden":[59.33,18.07],"Denmark":[55.68,12.57],"Poland":[52.23,21.01],"Czech Republic":[50.08,14.44],"Slovakia":[48.15,17.11],"Russia":[55.75,37.62],"Ukraine":[50.45,30.52],"Belarus":[53.9,27.57],"Bulgaria":[42.7,23.32],"Serbia":[44.79,20.46],"Croatia":[45.81,15.98],"Slovenia":[46.06,14.51],"Finland":[60.17,24.94],"Hungary":[47.5,19.05],"Estonia":[59.44,24.75],"Latvia":[56.95,24.11],"Lithuania":[54.69,25.28],"Greece":[37.98,23.73],"Albania":[41.33,19.82]};
+const EDGES = [["Albania","Greece"],["Austria","Czech Republic"],["Austria","Germany"],["Austria","Hungary"],["Austria","Italy"],["Austria","Slovakia"],["Austria","Slovenia"],["Austria","Switzerland"],["Belarus","Latvia"],["Belarus","Lithuania"],["Belarus","Poland"],["Belarus","Russia"],["Belarus","Ukraine"],["Belgium","France"],["Belgium","Germany"],["Belgium","Netherlands"],["Bulgaria","Greece"],["Bulgaria","Romania"],["Bulgaria","Serbia"],["Croatia","Hungary"],["Croatia","Serbia"],["Croatia","Slovenia"],["Czech Republic","Germany"],["Czech Republic","Poland"],["Czech Republic","Slovakia"],["Denmark","Germany"],["Denmark","Norway"],["Denmark","Sweden"],["Estonia","Finland"],["Estonia","Latvia"],["Estonia","Russia"],["Finland","Norway"],["Finland","Russia"],["Finland","Sweden"],["France","Germany"],["France","Italy"],["France","Spain"],["France","Switzerland"],["Germany","Netherlands"],["Germany","Poland"],["Germany","Switzerland"],["Hungary","Romania"],["Hungary","Serbia"],["Hungary","Slovakia"],["Hungary","Slovenia"],["Hungary","Ukraine"],["Italy","Slovenia"],["Italy","Switzerland"],["Latvia","Lithuania"],["Latvia","Russia"],["Lithuania","Poland"],["Norway","Russia"],["Norway","Sweden"],["Poland","Slovakia"],["Poland","Ukraine"],["Portugal","Spain"],["Romania","Serbia"],["Romania","Ukraine"],["Russia","Ukraine"],["Slovakia","Ukraine"],["Slovenia","Croatia"]];
+const ADJ = {}; EDGES.forEach(([a,b])=>{(ADJ[a]=ADJ[a]||new Set()).add(b);(ADJ[b]=ADJ[b]||new Set()).add(a);});
+
+const SEQ = {"pairs": {"Spain_Russia": {"graph": [["Portugal", 2], ["France", 1], ["Italy", 5], ["Ukraine", 2], ["Russia", 1]], "geometric": [["Spain", 4], ["France", 2], ["Italy", 3], ["Austria", 3], ["Poland", 4], ["Ukraine", 8], ["Russia", 1]], "linear": [["Portugal", 7], ["Spain", 5], ["Ukraine", 11], ["Belarus", 1], ["Russia", 1]], "oracle": [["Portugal", 2], ["Spain", 2], ["France", 5], ["Germany", 3], ["Poland", 10], ["Belarus", 3], ["Russia", 1]]}, "Portugal_Finland": {"graph": [["Spain", 3], ["Portugal", 4], ["Spain", 1], ["Russia", 1], ["Finland", 2]], "geometric": [["Spain", 8], ["France", 2], ["Italy", 1], ["France", 1], ["Germany", 6], ["Poland", 4], ["Latvia", 1], ["Russia", 1], ["Finland", 1]], "linear": [["Spain", 12], ["Russia", 6], ["Finland", 7]], "oracle": [["Spain", 3], ["Portugal", 4], ["Spain", 2], ["France", 5], ["Germany", 4], ["Denmark", 2], ["Sweden", 8], ["Finland", 3]]}, "Greece_Norway": {"graph": [["Greece", 2], ["Italy", 6], ["Spain", 4], ["Portugal", 1], ["Denmark", 3], ["Sweden", 5]], "geometric": [["Greece", 3], ["Bulgaria", 4], ["Serbia", 2], ["Hungary", 2], ["Poland", 6], ["Germany", 1], ["Denmark", 3], ["Sweden", 4]], "linear": [["Greece", 10], ["Bulgaria", 2], ["Denmark", 6], ["Sweden", 7]], "oracle": [["Greece", 2], ["Bulgaria", 3], ["Romania", 6], ["Ukraine", 9], ["Russia", 3], ["Finland", 2], ["Sweden", 1]]}, "Portugal_Greece": {"graph": [["Spain", 3], ["Italy", 6], ["Greece", 2]], "geometric": [["Spain", 14], ["France", 2], ["Italy", 4], ["Greece", 5]], "linear": [["Spain", 14], ["Greece", 11]], "oracle": [["Spain", 3], ["Portugal", 4], ["Spain", 2], ["France", 5], ["Germany", 3], ["Austria", 6], ["Hungary", 6], ["Romania", 7], ["Bulgaria", 2], ["Greece", 3]]}}, "shuffled": {"Spain_Russia": [["Spain", 1], ["Italy", 1], ["Greece", 1], ["Denmark", 1], ["Poland", 1], ["Belarus", 1], ["Ukraine", 1], ["Russia", 1]], "Portugal_Finland": [["Spain", 1], ["Poland", 1], ["Romania", 1], ["Ukraine", 1], ["Belarus", 1], ["Finland", 1]], "Greece_Norway": [["Greece", 1], ["Bulgaria", 1], ["Denmark", 1], ["Poland", 1], ["Sweden", 1]], "Portugal_Greece": [["Spain", 1], ["Greece", 1], ["Bulgaria", 1], ["Denmark", 1], ["Sweden", 1], ["Poland", 1]]}, "routes": {"Spain_Russia": {"oracle": ["Spain", "France", "Germany", "Poland", "Belarus", "Russia"], "graph": ["Spain", "Italy", "Russia"]}, "Portugal_Finland": {"oracle": ["Portugal", "Spain", "France", "Germany", "Denmark", "Norway", "Finland"]}, "Greece_Norway": {"oracle": ["Greece", "Bulgaria", "Romania", "Ukraine", "Russia", "Norway"]}, "Portugal_Greece": {"oracle": ["Portugal", "Spain", "France", "Germany", "Austria", "Hungary", "Romania", "Bulgaria", "Greece"]}}};
+
+/* run-1 concept-normalized mean distributions (16 prompts, L33 site) */
+const DIST = {
+ "no patch": {"France":.101442,"Italy":.033368,"Spain":.003603,"Portugal":.026161,"Romania":.016983,"Germany":.056306,"Netherlands":.001897,"Belgium":.006114,"Austria":.052451,"Switzerland":.020699,"Norway":.060741,"Sweden":.038829,"Denmark":.070126,"Poland":.102517,"Czech Republic":.024658,"Slovakia":.007205,"Russia":.076115,"Ukraine":.03728,"Belarus":.036581,"Bulgaria":.008026,"Serbia":.005897,"Croatia":.003091,"Slovenia":.055991,"Finland":.038168,"Hungary":.050417,"Estonia":.008346,"Latvia":.041725,"Lithuania":.01229,"Greece":.00185,"Albania":.001126},
+ "patch → Spain": {"France":.161829,"Italy":.023306,"Spain":.032042,"Portugal":.220194,"Romania":.007191,"Germany":.012033,"Netherlands":.001968,"Belgium":.00814,"Austria":.004494,"Switzerland":.00309,"Norway":.039158,"Sweden":.038121,"Denmark":.051083,"Poland":.084273,"Czech Republic":.005124,"Slovakia":.003021,"Russia":.077259,"Ukraine":.026391,"Belarus":.036091,"Bulgaria":.005799,"Serbia":.004411,"Croatia":.001128,"Slovenia":.053358,"Finland":.019074,"Hungary":.012692,"Estonia":.00815,"Latvia":.041607,"Lithuania":.012173,"Greece":.0051,"Albania":.001702},
+ "patch → Russia": {"France":.068035,"Italy":.007378,"Spain":.00677,"Portugal":.026597,"Romania":.010916,"Germany":.023953,"Netherlands":.001942,"Belgium":.006351,"Austria":.00822,"Switzerland":.003516,"Norway":.053905,"Sweden":.053094,"Denmark":.053625,"Poland":.128664,"Czech Republic":.006718,"Slovakia":.004304,"Russia":.110492,"Ukraine":.110876,"Belarus":.078865,"Bulgaria":.009273,"Serbia":.006536,"Croatia":.001748,"Slovenia":.053696,"Finland":.043327,"Hungary":.02055,"Estonia":.026985,"Latvia":.049965,"Lithuania":.018222,"Greece":.003446,"Albania":.002033}};
+const PATCH_OF = {"patch → Spain":"Spain","patch → Russia":"Russia","no patch":null};
+
+const HEAT = { layers:[33,30,24,18,12,6,0], cols:["last_token","country","direction"],
+ v:{33:[.41,.03,.03],30:[.28,.03,.03],24:[.15,.03,.03],18:[.04,.18,.04],12:[.03,.22,.03],6:[.03,.20,.03],0:[.03,.28,.03]} };
+
+const SITECMP = [ /* argmax_expected */
+ {g:"Spain",  floor:.156, l33:.219, l12:.281},
+ {g:"Russia", floor:.042, l33:.083, l12:.417}];
+
+const MODE_COLOR = {geometric:"var(--amber)", oracle:"var(--teal)", linear:"var(--rust)", graph:"var(--violet)"};
+const MODE_HEX = {geometric:"#e8a33d", oracle:"#41b8ad", linear:"#c2553f", graph:"#9a86d8"};
+const MODE_LABEL = {geometric:"geometric", oracle:"oracle", linear:"linear", graph:"graph k-NN"};
+const PAIRS = ["Spain_Russia","Portugal_Finland","Greece_Norway","Portugal_Greece"];
+const SVGNS = "http://www.w3.org/2000/svg";
+
+/* ================= helpers ================= */
+function el(tag, attrs, parent){ const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]); if(parent) parent.appendChild(e); return e; }
+function proj(W,H,pad){ // equirectangular, std parallel ~48
+  const lon0=-10.5, lon1=39, lat0=36.2, lat1=61.8, kx=Math.cos(48*Math.PI/180);
+  const sx=(W-2*pad)/((lon1-lon0)*kx), sy=(H-2*pad)/(lat1-lat0), s=Math.min(sx,sy);
+  const w=(lon1-lon0)*kx*s, h=(lat1-lat0)*s, ox=(W-w)/2, oy=(H-h)/2;
+  return ([lat,lon])=>[ox+(lon-lon0)*kx*s, oy+(lat1-lat)*s];
+}
+function catmull(pts){ if(pts.length<2)return ""; if(pts.length===2)return `M${pts[0]}L${pts[1]}`;
+  let d=`M${pts[0][0]},${pts[0][1]}`;
+  for(let i=0;i<pts.length-1;i++){ const p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(pts.length-1,i+2)];
+    const c1=[p1[0]+(p2[0]-p0[0])/6,p1[1]+(p2[1]-p0[1])/6], c2=[p2[0]-(p3[0]-p1[0])/6,p2[1]-(p3[1]-p1[1])/6];
+    d+=`C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p2[0]},${p2[1]}`; }
+  return d; }
+const SHORT = {"Czech Republic":"Czechia","Netherlands":"Netherl.","Switzerland":"Switz."};
+
+function drawBase(svg, W, H, opts={}){
+  svg.innerHTML="";
+  const P = proj(W,H,opts.pad||34);
+  // graticule
+  const g=el("g",{stroke:"rgba(236,228,206,.05)","stroke-width":"1"},svg);
+  for(let lon=-10;lon<=40;lon+=5){const [x1,y1]=P([62,lon]),[x2,y2]=P([36,lon]);el("line",{x1,y1,x2,y2},g);}
+  for(let lat=40;lat<=60;lat+=5){const [x1,y1]=P([lat,-10.5]),[x2,y2]=P([lat,39]);el("line",{x1,y1,x2,y2},g);}
+  // borders
+  const gb=el("g",{stroke:"rgba(236,228,206,.16)","stroke-width":"1"},svg);
+  EDGES.forEach(([a,b])=>{const [x1,y1]=P(CAP[a]),[x2,y2]=P(CAP[b]);el("line",{x1,y1,x2,y2},gb);});
+  // nodes + labels
+  const gn=el("g",{},svg);
+  for(const c in CAP){ const [x,y]=P(CAP[c]);
+    el("circle",{cx:x,cy:y,r:2.3,fill:"rgba(236,228,206,.55)"},gn);
+    if(!opts.noLabels){ const t=el("text",{x:x+4,y:y-4,"font-size":opts.fs||8.5,fill:"rgba(236,228,206,.4)",
+      "font-family":"IBM Plex Mono, monospace"},gn); t.textContent=(SHORT[c]||c); } }
+  return P;
+}
+
+/* ================= hero map ================= */
+(function(){
+  const svg=document.getElementById("heromap");
+  const W=1200,H=760; svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  const P=drawBase(svg,W,H,{pad:120,fs:9});
+  const chain=SEQ.pairs["Spain_Russia"].geometric.map(s=>P(CAP[s[0]]));
+  const path=el("path",{d:catmull(chain),fill:"none",stroke:"#e8a33d","stroke-width":2.4,
+    "stroke-linecap":"round",opacity:.95},svg);
+  const L=path.getTotalLength();
+  path.style.strokeDasharray=L; path.style.strokeDashoffset=L;
+  path.style.transition="stroke-dashoffset 3.4s cubic-bezier(.6,0,.3,1) .8s";
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{path.style.strokeDashoffset="0";}));
+  chain.forEach(([x,y],i)=>{ const c=el("circle",{cx:x,cy:y,r:0,fill:"#e8a33d"},svg);
+    c.style.transition=`r .4s ease ${1+i*.42}s`; requestAnimationFrame(()=>requestAnimationFrame(()=>c.setAttribute("r",3.6))); });
+})();
+
+/* ================= locate heatmap ================= */
+(function(){
+  const svg=document.getElementById("heatmap"); const W=460,H=330;
+  const x0=120,y0=24,cw=92,ch=36;
+  const color=v=>{ const t=Math.min(1,v/0.45);
+    return `rgba(${Math.round(20+t*212)},${Math.round(30+t*120)},${Math.round(60-t*10)},${0.25+t*.75})`; };
+  HEAT.cols.forEach((c,j)=>{ const t=el("text",{x:x0+j*cw+cw/2,y:y0-8,"text-anchor":"middle","font-size":9,
+    fill:"#b9b09a","font-family":"IBM Plex Mono, monospace"},svg); t.textContent=c; });
+  HEAT.layers.forEach((l,i)=>{
+    const t=el("text",{x:x0-12,y:y0+i*ch+ch/2+3,"text-anchor":"end","font-size":9.5,
+      fill:"#b9b09a","font-family":"IBM Plex Mono, monospace"},svg); t.textContent="L"+l;
+    HEAT.v[l].forEach((v,j)=>{
+      el("rect",{x:x0+j*cw+2,y:y0+i*ch+2,width:cw-4,height:ch-4,rx:2,fill:color(v)},svg);
+      const tv=el("text",{x:x0+j*cw+cw/2,y:y0+i*ch+ch/2+3.5,"text-anchor":"middle","font-size":9.5,
+        fill:v>.12?"#0b1020":"#7e7a6d","font-family":"IBM Plex Mono, monospace","font-weight":v>.12?600:400},svg);
+      tv.textContent=v.toFixed(2);
+    });
+  });
+  // annotations
+  const a1=el("rect",{x:x0+2,y:y0+2,width:cw-4,height:36-4,rx:2,fill:"none",stroke:"#c2553f","stroke-width":1.4,"stroke-dasharray":"4 3"},svg);
+  const t1=el("text",{x:x0+cw+6,y:y0+15,"font-size":8.5,fill:"#c2553f","font-family":"IBM Plex Mono, monospace"},svg);
+  const i12=HEAT.layers.indexOf(12);
+  el("rect",{x:x0+cw+2,y:y0+i12*ch+2,width:cw-4,height:ch-4,rx:2,fill:"none",stroke:"#e8a33d","stroke-width":1.6},svg);
+  const t2=el("text",{x:x0+2*cw+4,y:y0+i12*ch+ch/2+3,"font-size":8.5,fill:"#e8a33d","font-family":"IBM Plex Mono, monospace"},svg);
+  t2.textContent="← the real site";
+  t1.textContent="← final layer: trivial";
+})();
+
+/* ================= distribution chart ================= */
+(function(){
+  const svg=document.getElementById("distChart"), cap=document.getElementById("distCap"),
+        chips=document.getElementById("distChips");
+  const conds=Object.keys(DIST); let cur="patch → Spain";
+  conds.forEach(c=>{ const b=document.createElement("button"); b.className="chip"+(c===cur?" on":"");
+    b.textContent=c; b.onclick=()=>{cur=c;render();chips.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===b));};
+    chips.appendChild(b); });
+  function render(){
+    svg.innerHTML="";
+    const d=DIST[cur], patched=PATCH_OF[cur];
+    const order=Object.keys(d).sort((a,b)=>d[b]-d[a]);
+    const W=980,H=320,x0=10,y0=14,bw=W/order.length,bh=H-74,max=.23;
+    order.forEach((c,i)=>{
+      const v=d[c], h=Math.max(1.5,v/max*bh), x=x0+i*bw, y=y0+bh-h;
+      const isN = patched && ADJ[patched] && ADJ[patched].has(c);
+      const isSelf = c===patched;
+      const fill = isN ? "#e8a33d" : isSelf ? "#d8689a" : "rgba(236,228,206,.22)";
+      const r=el("rect",{x:x+3,y:y0+bh,width:bw-6,height:0,rx:1.5,fill},svg);
+      r.style.transition=`y .5s cubic-bezier(.5,0,.3,1) ${i*14}ms, height .5s cubic-bezier(.5,0,.3,1) ${i*14}ms`;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{r.setAttribute("y",y);r.setAttribute("height",h);}));
+      if(v>.018){ const tv=el("text",{x:x+bw/2,y:y-5,"text-anchor":"middle","font-size":8.4,
+        fill: isN?"#e8a33d":isSelf?"#d8689a":"#7e7a6d","font-family":"IBM Plex Mono, monospace"},svg);
+        tv.textContent=v.toFixed(2).replace("0.","."); }
+      const tl=el("text",{x:x+bw/2,y:y0+bh+10,"font-size":8,
+        fill:isN?"#e8a33d":isSelf?"#d8689a":"#7e7a6d","font-family":"IBM Plex Mono, monospace",
+        transform:`rotate(-52 ${x+bw/2} ${y0+bh+10})`,"text-anchor":"end"},svg);
+      tl.textContent=SHORT[c]||c;
+    });
+    cap.innerHTML = patched
+      ? `<b>Concept-normalized answer distribution, 16 prompts, ${cur} (L33 run-1 data).</b>
+         <span style="color:#e8a33d">amber = in-set neighbors of ${patched}</span> ·
+         <span style="color:#d8689a">pink = ${patched} itself (the subject-echo, ~0.1)</span>.
+         The patch moves the answer mass onto the patched country's <b>border set</b> — the causal model's prediction —
+         while the patched token itself stays near chance.`
+      : `<b>No-patch floor.</b> The model's marginal answer preference over the 30 countries (mixed prompts).`;
+  }
+  render();
+})();
+
+/* ================= site comparison ================= */
+(function(){
+  const svg=document.getElementById("siteChart");
+  const W=460,H=300,x0=90,y0=30,bh=H-90,max=.45;
+  const cols=[["floor","rgba(236,228,206,.25)"],["l33","#c2553f"],["l12","#e8a33d"]];
+  const lab={floor:"no patch",l33:"L33 · last_tok",l12:"L12 · country"};
+  SITECMP.forEach((row,gi)=>{
+    const gx=x0+gi*180;
+    const t=el("text",{x:gx+62,y:H-26,"text-anchor":"middle","font-size":11,fill:"#ece4ce",
+      "font-family":"Fraunces, serif","font-style":"italic"},svg); t.textContent=row.g;
+    cols.forEach(([k,c],i)=>{
+      const v=row[k], h=v/max*bh, x=gx+i*44, y=y0+bh-h;
+      const r=el("rect",{x,y:y0+bh,width:32,height:0,rx:2,fill:c},svg);
+      r.style.transition=`y .7s cubic-bezier(.5,0,.3,1) ${(gi*3+i)*90}ms, height .7s cubic-bezier(.5,0,.3,1) ${(gi*3+i)*90}ms`;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{r.setAttribute("y",y);r.setAttribute("height",h);}));
+      const tv=el("text",{x:x+16,y:y-6,"text-anchor":"middle","font-size":9.5,fill:c==="rgba(236,228,206,.25)"?"#7e7a6d":c,
+        "font-family":"IBM Plex Mono, monospace","font-weight":600},svg); tv.textContent=v.toFixed(3).slice(1);
+    });
+  });
+  // legend
+  cols.forEach(([k,c],i)=>{
+    el("rect",{x:x0+i*125,y:8,width:10,height:10,rx:2,fill:c},svg);
+    const t=el("text",{x:x0+i*125+15,y:17,"font-size":8.5,fill:"#b9b09a","font-family":"IBM Plex Mono, monospace"},svg);
+    t.textContent=lab[k];
+  });
+  const ax=el("text",{x:14,y:y0+10,"font-size":8.2,fill:"#7e7a6d","font-family":"IBM Plex Mono, monospace",
+    transform:`rotate(-90 14 ${y0+10})`,"text-anchor":"end"},svg);
+  ax.textContent="argmax on expected-neighbor set";
+})();
+
+/* ================= big traversal map ================= */
+(function(){
+  const svg=document.getElementById("bigmap");
+  const W=760,H=480;
+  let pair="Spain_Russia", mode="geometric", animToken=0;
+
+  const pairChips=document.getElementById("pairChips"), modeChips=document.getElementById("modeChips");
+  PAIRS.forEach(p=>{ const b=document.createElement("button"); b.className="chip"+(p===pair?" on":"");
+    b.textContent=p.replace("_"," → "); b.dataset.p=p;
+    b.onclick=()=>{pair=p;render();pairChips.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===b));};
+    pairChips.appendChild(b); });
+  ["geometric","oracle","linear","graph"].forEach(m=>{ const b=document.createElement("button");
+    b.className="chip"+(m===mode?" on":"");
+    const d=document.createElement("span"); d.className="dot"; d.style.background=MODE_HEX[m];
+    b.appendChild(d); b.appendChild(document.createTextNode(MODE_LABEL[m]));
+    b.onclick=()=>{mode=m;render();modeChips.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===b));};
+    modeChips.appendChild(b); });
+  document.getElementById("replayBtn").onclick=()=>render();
+
+  function render(){
+    const tok=++animToken;
+    const P=drawBase(svg,W,H,{pad:46,fs:8.5});
+    const chain=SEQ.pairs[pair][mode];
+    const hex=MODE_HEX[mode];
+    const [a,b]=pair.split("_");
+
+    // supplied route underlay (oracle / graph)
+    const supplied=(SEQ.routes[pair]||{})[mode];
+    if(supplied){ const pts=supplied.map(c=>P(CAP[c]));
+      el("path",{d:catmull(pts),fill:"none",stroke:hex,"stroke-width":7,opacity:.13,"stroke-linecap":"round"},svg);
+      supplied.forEach(c=>{const [x,y]=P(CAP[c]);
+        el("circle",{cx:x,cy:y,r:7,fill:"none",stroke:hex,"stroke-width":1,opacity:.4,"stroke-dasharray":"2 2"},svg);});
+    }
+    // straight chord reference for context
+    const [xa,ya]=P(CAP[a]),[xb,yb]=P(CAP[b]);
+    el("line",{x1:xa,y1:ya,x2:xb,y2:yb,stroke:"rgba(236,228,206,.14)","stroke-width":1,"stroke-dasharray":"3 5"},svg);
+
+    // decoded chain
+    const pts=chain.map(s=>P(CAP[s[0]]));
+    const path=el("path",{d:catmull(pts),fill:"none",stroke:hex,"stroke-width":2.6,"stroke-linecap":"round"},svg);
+    const L=path.getTotalLength();
+    path.style.strokeDasharray=L; path.style.strokeDashoffset=L;
+    path.style.transition="stroke-dashoffset 2.6s cubic-bezier(.55,0,.3,1) .15s";
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(tok===animToken) path.style.strokeDashoffset="0"; }));
+
+    // dwell nodes (size ∝ steps decoded there)
+    const maxC=Math.max(...chain.map(s=>s[1]));
+    chain.forEach((s,i)=>{ const [x,y]=P(CAP[s[0]]); const r=3+5.5*Math.sqrt(s[1]/maxC);
+      const c=el("circle",{cx:x,cy:y,r:0,fill:hex,opacity:.92},svg);
+      c.style.transition=`r .45s cubic-bezier(.3,1.4,.5,1) ${.3+i*2.45/chain.length}s`;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(tok===animToken) c.setAttribute("r",r); }));
+      const t=el("text",{x:x,y:y-r-5,"text-anchor":"middle","font-size":9.5,fill:"#ece4ce",
+        "font-family":"IBM Plex Mono, monospace","font-weight":600,opacity:0},svg);
+      t.textContent=SHORT[s[0]]||s[0];
+      t.style.transition=`opacity .4s ease ${.45+i*2.45/chain.length}s`;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(tok===animToken) t.style.opacity=.95; }));
+    });
+    // traveling dot
+    const dot=el("circle",{r:4.4,fill:"#ece4ce",stroke:hex,"stroke-width":2},svg);
+    const t0=performance.now()+150, dur=2600;
+    (function step(now){ if(tok!==animToken){dot.remove();return;}
+      const u=Math.min(1,Math.max(0,(now-t0)/dur)); const p=path.getPointAtLength(u*L);
+      dot.setAttribute("cx",p.x); dot.setAttribute("cy",p.y);
+      if(u<1) requestAnimationFrame(step); else dot.remove(); })(performance.now());
+
+    // ribbon + stats
+    const rib=document.getElementById("ribbon"); rib.innerHTML="";
+    chain.forEach((s,i)=>{
+      if(i>0){ const prev=chain[i-1][0], ok=ADJ[prev]&&ADJ[prev].has(s[0]);
+        const ar=document.createElement("span"); ar.className="rib-arrow"+(ok?"":" broken");
+        ar.textContent=ok?"→":"⇏"; ar.title=ok?"true border":"not a border"; rib.appendChild(ar); }
+      const sp=document.createElement("span");
+      sp.className="rib"+((i===0||i===chain.length-1)?" endpoint":"");
+      sp.innerHTML=(SHORT[s[0]]||s[0])+`<span class="cnt">×${s[1]}</span>`;
+      rib.appendChild(sp);
+    });
+    const names=chain.map(s=>s[0]);
+    const inter=[...new Set(names)].filter(c=>c!==a&&c!==b).length;
+    let ok=0; for(let i=1;i<names.length;i++) if(ADJ[names[i-1]]&&ADJ[names[i-1]].has(names[i])) ok++;
+    document.getElementById("statChain").textContent=names.length+" stops";
+    document.getElementById("statInter").textContent=inter;
+    document.getElementById("statContig").textContent=ok+" / "+(names.length-1);
+    document.getElementById("mapCap").innerHTML =
+      `<b>${MODE_LABEL[mode]} · ${a} → ${b}.</b> Node size = steps decoded at that subject (dwell). ` +
+      (mode==="geometric" ? "The geodesic receives <b>only the two endpoints</b>; every intermediate stop is the model's." :
+       mode==="oracle" ? "Dashed halos mark the <b>supplied control points</b> (true-border BFS route); the decoded chain replays them." :
+       mode==="graph" ? "Faint underlay = the k-NN Dijkstra route (edge precision vs true borders: 0.27)." :
+       "Dashed line = the straight chord. Note the single long jump across the middle.") +
+      " ⇏ marks a decoded transition that is not a true border.";
+  }
+  // initial render when scrolled into view
+  const io=new IntersectionObserver(es=>{ if(es[0].isIntersecting){render();io.disconnect();} },{threshold:.25});
+  io.observe(svg);
+})();
+
+/* ================= control mini-maps ================= */
+(function(){
+  function mini(svgId,ribId,chain,color){
+    const svg=document.getElementById(svgId), W=460,H=330;
+    const io=new IntersectionObserver(es=>{ if(!es[0].isIntersecting) return; io.disconnect();
+      const P=drawBase(svg,W,H,{pad:30,noLabels:true});
+      const pts=chain.map(s=>P(CAP[s[0]]));
+      const path=el("path",{d:catmull(pts),fill:"none",stroke:color,"stroke-width":2.2,"stroke-linecap":"round"},svg);
+      const L=path.getTotalLength(); path.style.strokeDasharray=L; path.style.strokeDashoffset=L;
+      path.style.transition="stroke-dashoffset 2.2s cubic-bezier(.55,0,.3,1) .2s";
+      requestAnimationFrame(()=>requestAnimationFrame(()=>path.style.strokeDashoffset="0"));
+      chain.forEach((s,i)=>{ const [x,y]=P(CAP[s[0]]);
+        el("circle",{cx:x,cy:y,r:3.4,fill:color},svg);
+        const t=el("text",{x:x,y:y-7,"text-anchor":"middle","font-size":8.5,fill:"#ece4ce",
+          "font-family":"IBM Plex Mono, monospace"},svg); t.textContent=SHORT[s[0]]||s[0]; });
+    },{threshold:.3});
+    io.observe(svg);
+    const rib=document.getElementById(ribId); rib.innerHTML="";
+    chain.forEach((s,i)=>{ if(i>0){ const prev=chain[i-1][0], ok=ADJ[prev]&&ADJ[prev].has(s[0]);
+        const ar=document.createElement("span"); ar.className="rib-arrow"+(ok?"":" broken");
+        ar.textContent=ok?"→":"⇏"; rib.appendChild(ar);}
+      const sp=document.createElement("span"); sp.className="rib"; sp.textContent=SHORT[s[0]]||s[0]; rib.appendChild(sp); });
+  }
+  mini("mapCanon","ribCanon",SEQ.pairs["Spain_Russia"].geometric,"#e8a33d");
+  mini("mapShuf","ribShuf",SEQ.shuffled["Spain_Russia"],"#c2553f");
+})();
+
+/* ================= scroll reveals ================= */
+(function(){
+  const io=new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){e.target.classList.add("vis");io.unobserve(e.target);} }),{threshold:.12});
+  document.querySelectorAll(".reveal").forEach(x=>io.observe(x));
+})();
+</script>
+</body>
+</html>
