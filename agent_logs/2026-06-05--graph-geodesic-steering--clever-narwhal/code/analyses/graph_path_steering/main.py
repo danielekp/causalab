@@ -128,6 +128,7 @@ def _argmax_country_sequence(
 def _build_signature_mask(
     eval_samples: list,
     value_strs: list[str],
+    include_echo: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Per-prompt subject→answer signature mask from the task's neighbor table.
 
@@ -135,6 +136,12 @@ def _build_signature_mask(
     M[j, S, a] = 1 iff answer-country ``a`` is an in-set neighbor of subject S in
     prompt j's direction; valid is (n_prompts, n_subjects), False where the
     (S, direction) cell has no in-set neighbor (excluded from the prompt average).
+
+    ``include_echo`` additionally sets M[j, S, S] = 1: a patched subject produces
+    ~0.13 mass on its own token (subject-echo, patch_parity run 3). Without the echo
+    term that mass is harvested by the subject's *neighbors* (whoever has S in their
+    neighbor set), biasing the decode one country over — the echo variant lets each
+    subject claim its own echo.
     """
     n_values = len(value_strs)
     idx_of = {v: i for i, v in enumerate(value_strs)}
@@ -145,6 +152,8 @@ def _build_signature_mask(
             for nb in NEIGHBOR_OF.get((name, direction), []):
                 if nb in idx_of:
                     M[j, S, idx_of[nb]] = 1.0
+            if include_echo:
+                M[j, S, S] = 1.0
     return M, M.sum(dim=-1) > 0
 
 
@@ -385,8 +394,13 @@ def main(cfg: DictConfig) -> dict[str, Any]:
 
     modes_cfg = list(OmegaConf.to_container(analysis.path_modes, resolve=True))
 
-    # --- Subject-signature decode mask (corrected readout; see module docstring) ---
-    sig_mask, sig_valid = _build_signature_mask(eval_samples, value_strs)
+    # --- Subject-signature decode masks (corrected readout; see module docstring) ---
+    sig_mask, sig_valid = _build_signature_mask(
+        eval_samples, value_strs, include_echo=False
+    )
+    sig_mask_echo, sig_valid_echo = _build_signature_mask(
+        eval_samples, value_strs, include_echo=True
+    )
 
     # --- k-NN graph vs true border graph (H3 premise check) ---
     graph_quality = _graph_vs_border_quality(pca_centroids, mask, value_strs, graph_k)
@@ -522,16 +536,30 @@ def main(cfg: DictConfig) -> dict[str, Any]:
             subj_seq, sig_matrix = _subject_signature_decode(
                 probs, sig_mask, sig_valid, n_values, value_strs
             )
+            subj_seq_echo, sig_matrix_echo = _subject_signature_decode(
+                probs, sig_mask_echo, sig_valid_echo, n_values, value_strs
+            )
             intermediates = [
                 c for c in dict.fromkeys(subj_seq) if c not in (start_label, end_label)
+            ]
+            intermediates_echo = [
+                c
+                for c in dict.fromkeys(subj_seq_echo)
+                if c not in (start_label, end_label)
             ]
             coverage.setdefault(f"{start_label}_{end_label}", {})[mode] = {
                 "subject_decode_sequence": subj_seq,
                 "n_intermediate_subjects": len(intermediates),
                 "intermediate_subjects": intermediates,
+                "subject_decode_sequence_echo": subj_seq_echo,
+                "n_intermediate_subjects_echo": len(intermediates_echo),
+                "intermediate_subjects_echo": intermediates_echo,
                 "answer_argmax_sequence": ans_seq,
                 "subject_signature_matrix": [
                     [round(x, 6) for x in row] for row in sig_matrix.tolist()
+                ],
+                "subject_signature_matrix_echo": [
+                    [round(x, 6) for x in row] for row in sig_matrix_echo.tolist()
                 ],
             }
 
@@ -550,13 +578,17 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                 figure_format=figure_fmt,
             )
             logger.info(
-                "%s [%s->%s]: subjects %s | %d intermediates",
+                "%s [%s->%s]: subjects %s | %d intermediates || echo-decode %s | %d",
                 mode,
                 start_label,
                 end_label,
                 " > ".join(dict.fromkeys(subj_seq)),
                 coverage[f"{start_label}_{end_label}"][mode][
                     "n_intermediate_subjects"
+                ],
+                " > ".join(dict.fromkeys(subj_seq_echo)),
+                coverage[f"{start_label}_{end_label}"][mode][
+                    "n_intermediate_subjects_echo"
                 ],
             )
 

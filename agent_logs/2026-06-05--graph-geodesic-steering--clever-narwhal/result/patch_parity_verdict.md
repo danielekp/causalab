@@ -132,3 +132,30 @@ pipeline.** All downstream scoring must use the subject/neighbor-signature reado
   Spain→France→Germany→Poland→Belarus→Russia, same raw-space mechanism) and
   `graph_quality.json` (k-NN edges vs true border graph, precision/recall + explicit
   false-positive/false-negative edge lists).
+
+---
+
+## Addendum: oracle route + graph quality (2026-06-12, run 5)
+
+| mode | decoded subjects | intermediates |
+|---|---|---|
+| geometric (manifold geodesic) | Spain → Italy → Slovakia → Ukraine → Belarus → Russia | 4 |
+| oracle (true-border route, raw space) | Spain → Czech Republic → Ukraine → Belarus → Russia | 3 |
+| graph_geodesic (k-NN route) | Spain → Italy → Russia | 1 |
+| linear | Spain → Italy → Russia | 1 |
+
+`graph_quality.json`: k=4 PCA-graph edge precision **0.27**, recall **0.38**, f1 0.32.
+
+- **H3 split verdict**: the *mechanism* works (oracle route walks a contiguous
+  west-to-east chain through raw centroids) but the *data-driven route* fails — the
+  k-NN graph over PCA centroids does not encode borders (~3 of 4 edges are
+  non-borders, e.g. Italy–Russia). Geographic adjacency is NOT recoverable from raw
+  activation distances at this site, even though geographic *traversal* in activation
+  space works when the route is supplied externally (oracle list, or the manifold's
+  lat/lon parameterization).
+- **Decoder bias identified**: oracle's control points France/Germany/Poland decoded
+  as Czech Republic/Ukraine — the subject-echo mass (~0.13 on the subject's own
+  token) is harvested by *neighbors* of the true subject under the neighbor-only
+  signature. Fixed by an echo-augmented decode (signature additionally claims the
+  subject's own token), emitted side-by-side as `subject_decode_sequence_echo`
+  (run 6).
