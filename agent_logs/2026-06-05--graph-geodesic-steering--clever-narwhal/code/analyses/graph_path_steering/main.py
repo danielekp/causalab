@@ -148,6 +148,88 @@ def _build_signature_mask(
     return M, M.sum(dim=-1) > 0
 
 
+def _piecewise_path(
+    route_indices: list[int],
+    centroids: torch.Tensor,
+    steps_per_segment: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """Piecewise-linear path through ``centroids[route_indices]`` (duplicate segment
+    boundaries dropped)."""
+    segs: list[torch.Tensor] = []
+    for a, b in zip(route_indices[:-1], route_indices[1:]):
+        alphas = torch.linspace(
+            0.0, 1.0, steps_per_segment, device=device, dtype=centroids.dtype
+        )
+        seg = centroids[a].unsqueeze(0) + alphas.unsqueeze(1) * (
+            centroids[b] - centroids[a]
+        ).unsqueeze(0)
+        segs.append(seg if not segs else seg[1:])
+    return torch.cat(segs, dim=0)
+
+
+def _graph_vs_border_quality(
+    pca_centroids: torch.Tensor,
+    mask: torch.Tensor,
+    value_strs: list[str],
+    k: int,
+) -> dict[str, Any]:
+    """Compare the PCA-centroid k-NN graph's edges to the task's true border graph.
+
+    Diagnoses whether activation-space proximity encodes geographic adjacency — the
+    premise behind the graph_geodesic route (H3). Uses the same symmetric k-NN
+    construction as ``centroid_graph_geodesic``.
+    """
+    import numpy as np
+    from sklearn.neighbors import kneighbors_graph
+
+    valid_idx = [i for i in range(len(value_strs)) if mask[i]]
+    labels = [value_strs[i] for i in valid_idx]
+    feats = (
+        pca_centroids[valid_idx].detach().cpu().numpy().astype(np.float64)
+    )
+    adj = kneighbors_graph(
+        feats,
+        n_neighbors=min(k, len(labels) - 1),
+        mode="connectivity",
+        include_self=False,
+    )
+    adj = adj.maximum(adj.T)
+    rows, cols = adj.nonzero()
+    knn_edges = {
+        tuple(sorted((labels[i], labels[j]))) for i, j in zip(rows, cols) if i < j
+    }
+    value_set = set(labels)
+    true_edges = set()
+    for (c, _d), ns in NEIGHBOR_OF.items():
+        for n in ns:
+            if c in value_set and n in value_set:
+                true_edges.add(tuple(sorted((c, n))))
+    hits = knn_edges & true_edges
+    precision = len(hits) / len(knn_edges) if knn_edges else 0.0
+    recall = len(hits) / len(true_edges) if true_edges else 0.0
+    f1 = (
+        2 * precision * recall / (precision + recall)
+        if (precision + recall) > 0
+        else 0.0
+    )
+    return {
+        "k": int(k),
+        "n_knn_edges": len(knn_edges),
+        "n_true_border_edges": len(true_edges),
+        "n_matching_edges": len(hits),
+        "edge_precision": round(precision, 4),
+        "edge_recall": round(recall, 4),
+        "edge_f1": round(f1, 4),
+        "false_positive_edges": sorted(
+            [list(e) for e in knn_edges - true_edges]
+        ),
+        "false_negative_edges": sorted(
+            [list(e) for e in true_edges - knn_edges]
+        ),
+    }
+
+
 def _subject_signature_decode(
     probs: torch.Tensor,
     sig_mask: torch.Tensor,
@@ -306,6 +388,16 @@ def main(cfg: DictConfig) -> dict[str, Any]:
     # --- Subject-signature decode mask (corrected readout; see module docstring) ---
     sig_mask, sig_valid = _build_signature_mask(eval_samples, value_strs)
 
+    # --- k-NN graph vs true border graph (H3 premise check) ---
+    graph_quality = _graph_vs_border_quality(pca_centroids, mask, value_strs, graph_k)
+    logger.info(
+        "k-NN graph (k=%d) vs borders: precision=%.2f recall=%.2f f1=%.2f",
+        graph_quality["k"],
+        graph_quality["edge_precision"],
+        graph_quality["edge_recall"],
+        graph_quality["edge_f1"],
+    )
+
     # --- Endpoint pair(s) ---
     selected_pairs = [list(p) for p in analysis.selected_pairs]
 
@@ -351,23 +443,42 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                 # Build the piecewise-linear path between the route countries' RAW
                 # centroids (drop duplicate segment boundaries).
                 route_global = [value_strs.index(lbl) for lbl in route["route_labels"]]
-                segs: list[torch.Tensor] = []
-                for a, b in zip(route_global[:-1], route_global[1:]):
-                    alphas = torch.linspace(
-                        0.0, 1.0, steps_per_segment,
-                        device=device, dtype=raw_centroids.dtype,
-                    )
-                    seg = raw_centroids[a].unsqueeze(0) + alphas.unsqueeze(1) * (
-                        raw_centroids[b] - raw_centroids[a]
-                    ).unsqueeze(0)
-                    segs.append(seg if not segs else seg[1:])
-                grid_points = torch.cat(segs, dim=0)
+                grid_points = _piecewise_path(
+                    route_global, raw_centroids, steps_per_segment, device
+                )
                 override = Featurizer(id="identity")  # steer in raw space, like `linear`
                 route_record[f"{start_label}_{end_label}"] = {
                     "pair": [start_label, end_label],
                     "route_labels": route["route_labels"],
                     "segment_lengths": route["segment_lengths"],
                     "k_used": route["k_used"],
+                }
+            elif mode == "oracle":
+                if raw_centroids is None:
+                    logger.warning("Skipping oracle mode: no raw_features.safetensors")
+                    continue
+                oracle_routes = OmegaConf.to_container(
+                    analysis.get("oracle_routes") or {}, resolve=True
+                )
+                oracle_route = oracle_routes.get(f"{start_label}_{end_label}")
+                if not oracle_route:
+                    logger.warning(
+                        "Skipping oracle mode for %s_%s: no oracle_routes entry",
+                        start_label,
+                        end_label,
+                    )
+                    continue
+                bad = [l for l in oracle_route if l not in value_strs]
+                if bad:
+                    raise ValueError(f"oracle route labels not in task values: {bad}")
+                route_global = [value_strs.index(lbl) for lbl in oracle_route]
+                grid_points = _piecewise_path(
+                    route_global, raw_centroids, steps_per_segment, device
+                )
+                override = Featurizer(id="identity")  # same mechanism as graph_geodesic
+                route_record[f"{start_label}_{end_label}_oracle"] = {
+                    "pair": [start_label, end_label],
+                    "route_labels": list(oracle_route),
                 }
             elif mode == "geometric":
                 grid_points = _build_geodesic_path(
@@ -452,6 +563,8 @@ def main(cfg: DictConfig) -> dict[str, Any]:
     # --- Persist route + coverage + metadata (json; no causalab.io tensor outputs) ---
     with open(os.path.join(out_dir, "route.json"), "w") as f:
         json.dump(route_record, f, indent=2)
+    with open(os.path.join(out_dir, "graph_quality.json"), "w") as f:
+        json.dump(graph_quality, f, indent=2)
     with open(os.path.join(out_dir, "intermediate_coverage.json"), "w") as f:
         json.dump(coverage, f, indent=2)
     with open(os.path.join(out_dir, "metadata.json"), "w") as f:

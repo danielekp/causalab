@@ -60,7 +60,14 @@ graph_path_steering:
 
 - **`route.json`** — the Dijkstra country chain (Spain → … → Russia) for `graph_geodesic`, with per-edge
   lengths and the final `k_used`. A sensible chain of bordering countries supports H1; a single long jump
-  or non-adjacent hops falsifies it.
+  or non-adjacent hops falsifies it. `<pair>_oracle` entries record the hand-specified geographic route
+  steered by the `oracle` mode (same raw-space piecewise mechanism as `graph_geodesic` — isolates route
+  *quality* from route *construction*; run-2 found the k-NN route geographically wrong, e.g. Italy–Russia).
+- **`graph_quality.json`** — the PCA-centroid k-NN graph's undirected edges vs the task's true border
+  graph (symmetrized NEIGHBOR_OF): `edge_precision`/`edge_recall`/`edge_f1` plus the explicit
+  false-positive (activation-adjacent, not bordering) and false-negative (bordering, not
+  activation-adjacent) edge lists. Low precision falsifies the H3 premise that activation proximity
+  encodes geographic adjacency.
 - **`intermediate_coverage.json`** — per path mode (corrected readout, patch_parity verdict 2026-06-12:
   the steered variable is the question's *subject*; the model answers with its *neighbor*, so route
   coverage must be decoded, not read off the answer tokens):

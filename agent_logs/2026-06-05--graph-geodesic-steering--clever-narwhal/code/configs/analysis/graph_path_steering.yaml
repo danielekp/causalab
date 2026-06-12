@@ -14,7 +14,14 @@ activation_manifold: L33_last_token/spline_s0.0  # manifold cell under activatio
 
 # What to steer and compare.
 selected_pairs: [["Spain", "Russia"]] # endpoint country pairs
-path_modes: [graph_geodesic, geometric, linear]  # new mode + two shipped baselines
+path_modes: [graph_geodesic, geometric, linear, oracle]  # graph route, manifold geodesic, straight line, geographic-oracle route
+
+# Oracle routes (mode `oracle`): hand-specified geographic routes, every edge a true
+# border in the task's NEIGHBOR_OF table. Steered exactly like graph_geodesic
+# (piecewise-linear between raw centroids, identity featurizer) — isolates route
+# quality from route construction. Keyed "<start>_<end>" per selected pair.
+oracle_routes:
+  Spain_Russia: [Spain, France, Germany, Poland, Belarus, Russia]
 
 # Graph-geodesic knobs (consumed by methods.centroid_graph_geodesic).
 graph_k: 4                            # k for the k-NN centroid graph (auto-bumped if disconnected)

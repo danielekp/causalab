@@ -106,3 +106,29 @@ prompt's direction with the patched subject downstream. p_target_norm also rises
 ~0.13 (subject-echo). **L12/country (`pca_k32_ctok`) is the site for the geometry
 pipeline.** All downstream scoring must use the subject/neighbor-signature readout
 (now implemented in graph_path_steering's `subject_decode_sequence`).
+
+---
+
+## Addendum: first corrected-readout steering run at L12/country (2026-06-12, run 4)
+
+`graph_path_steering` at `pca_k32_ctok/L12_country/spline_s0.0`, Spain→Russia:
+
+| mode | decoded subject route | intermediates |
+|---|---|---|
+| **geometric** (manifold geodesic) | Spain → Italy → Slovakia → Ukraine → Belarus → Russia | **4** |
+| graph_geodesic (k-NN route) | Spain → Italy → Russia | 1 |
+| linear | Spain → Italy → Russia | 1 |
+
+- **H2 supported**: the manifold geodesic hands the decoded subject off through a
+  geographically ordered chain at a site where the model still computes (the old
+  readout would have scored every step ≈ chance).
+- Decode fidelity confirmed: graph_geodesic's decoded subjects exactly reproduce its
+  route control points (route.json: Spain→Italy→Russia, k_used=4).
+- **H3 premise in doubt**: the PCA k-NN graph contains a non-border Italy–Russia edge;
+  the "route" is activation-proximity, not geography. Italy decoding at the midpoint of
+  *both* raw-space modes suggests Italy's centroid sits near the global center /
+  Spain–Russia midpoint in activation space.
+- Follow-ups implemented (run 5): `oracle` path mode (hand-specified true-border route
+  Spain→France→Germany→Poland→Belarus→Russia, same raw-space mechanism) and
+  `graph_quality.json` (k-NN edges vs true border graph, precision/recall + explicit
+  false-positive/false-negative edge lists).
