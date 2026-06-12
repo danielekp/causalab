@@ -470,6 +470,22 @@ svg text{user-select:none}
     through <em>Iberia</em>. Geographic adjacency is not recoverable from raw activation distances,
     even though geographic traversal works when the chart is supplied.</p></div>
   </div>
+
+  <div class="panel reveal" style="margin-top:2.8rem">
+    <div style="display:flex;flex-wrap:wrap;gap:2rem;justify-content:space-between;align-items:flex-end">
+      <div>
+        <div class="figcap" style="margin:0 0 .3rem">WHAT THE k-NN GRAPH (k=4) ACTUALLY BELIEVES</div>
+        <div class="chips" id="gqChips"></div>
+      </div>
+      <div class="stat-row" style="margin:0;flex:0 1 26rem">
+        <div class="stat"><div class="lab">edge precision</div><div class="val" style="color:var(--violet)">0.27</div></div>
+        <div class="stat"><div class="lab">edge recall</div><div class="val">0.38</div></div>
+        <div class="stat"><div class="lab">k-NN edges</div><div class="val">85</div></div>
+      </div>
+    </div>
+    <svg id="gqmap" viewBox="0 0 760 480" width="100%"></svg>
+    <div class="figcap" id="gqCap"></div>
+  </div>
 </section>
 
 <hr class="rule">
@@ -839,6 +855,51 @@ function drawBase(svg, W, H, opts={}){
       " ⇏ marks a decoded transition that is not a true border.";
   }
   // initial render when scrolled into view
+  const io=new IntersectionObserver(es=>{ if(es[0].isIntersecting){render();io.disconnect();} },{threshold:.25});
+  io.observe(svg);
+})();
+
+/* ================= k-NN graph vs borders ================= */
+const GQ_FP = [["Albania","Belarus"],["Albania","Belgium"],["Albania","Bulgaria"],["Albania","Estonia"],["Albania","Latvia"],["Albania","Lithuania"],["Albania","Romania"],["Albania","Russia"],["Albania","Slovakia"],["Albania","Slovenia"],["Austria","Serbia"],["Austria","Spain"],["Austria","Ukraine"],["Belarus","Estonia"],["Belarus","Slovenia"],["Belgium","Italy"],["Belgium","Latvia"],["Belgium","Switzerland"],["Bulgaria","Italy"],["Bulgaria","Latvia"],["Bulgaria","Lithuania"],["Bulgaria","Slovakia"],["Croatia","Czech Republic"],["Croatia","Norway"],["Croatia","Poland"],["Croatia","Portugal"],["Czech Republic","France"],["Czech Republic","Norway"],["Denmark","Finland"],["Denmark","Netherlands"],["Denmark","Portugal"],["Estonia","Lithuania"],["Estonia","Slovenia"],["Finland","Romania"],["Finland","Spain"],["Finland","Switzerland"],["France","Norway"],["France","Poland"],["France","Portugal"],["Germany","Italy"],["Germany","Spain"],["Germany","Sweden"],["Greece","Italy"],["Greece","Russia"],["Greece","Spain"],["Hungary","Italy"],["Hungary","Spain"],["Italy","Portugal"],["Italy","Russia"],["Italy","Spain"],["Italy","Ukraine"],["Latvia","Slovakia"],["Latvia","Slovenia"],["Netherlands","Portugal"],["Netherlands","Sweden"],["Norway","Poland"],["Poland","Portugal"],["Poland","Sweden"],["Romania","Spain"],["Slovakia","Slovenia"],["Spain","Switzerland"],["Spain","Ukraine"]];
+const GQ_FN = [["Austria","Czech Republic"],["Austria","Germany"],["Austria","Slovakia"],["Austria","Slovenia"],["Belarus","Lithuania"],["Belarus","Poland"],["Belarus","Russia"],["Belarus","Ukraine"],["Belgium","France"],["Belgium","Germany"],["Belgium","Netherlands"],["Bulgaria","Greece"],["Bulgaria","Romania"],["Bulgaria","Serbia"],["Croatia","Hungary"],["Croatia","Slovenia"],["Czech Republic","Germany"],["Czech Republic","Slovakia"],["Denmark","Germany"],["Estonia","Finland"],["Estonia","Russia"],["Finland","Norway"],["Finland","Russia"],["France","Italy"],["France","Spain"],["France","Switzerland"],["Germany","Switzerland"],["Hungary","Slovakia"],["Hungary","Slovenia"],["Hungary","Ukraine"],["Italy","Slovenia"],["Lithuania","Poland"],["Norway","Russia"],["Poland","Slovakia"],["Poland","Ukraine"],["Russia","Ukraine"],["Slovakia","Ukraine"]];
+(function(){
+  const svg=document.getElementById("gqmap"), chips=document.getElementById("gqChips"),
+        cap=document.getElementById("gqCap");
+  const fnKey=new Set(GQ_FN.map(e=>e.join("|")));
+  const GQ_HIT=EDGES.filter(e=>!fnKey.has(e.join("|"))&&!fnKey.has([e[1],e[0]].join("|")));
+  const layers=[
+    {id:"fp", lab:"hallucinated edges (62)", on:true,  col:"#9a86d8", dash:null,  set:GQ_FP, w:1.4, op:.8},
+    {id:"hit",lab:"real borders found (23)", on:true,  col:"#7fc97f", dash:null,  set:GQ_HIT, w:1.6, op:.85},
+    {id:"fn", lab:"real borders missed (37)",on:false, col:"#c2553f", dash:"3 4", set:GQ_FN, w:1.3, op:.8},
+  ];
+  layers.forEach(L=>{ const b=document.createElement("button"); b.className="chip"+(L.on?" on":"");
+    const d=document.createElement("span"); d.className="dot"; d.style.background=L.col;
+    b.appendChild(d); b.appendChild(document.createTextNode(L.lab));
+    b.onclick=()=>{L.on=!L.on;b.classList.toggle("on",L.on);render();};
+    chips.appendChild(b); });
+  function render(){
+    const W=760,H=480, P=drawBase(svg,W,H,{pad:46,fs:8.5});
+    layers.forEach(L=>{ if(!L.on) return;
+      L.set.forEach(([a,b],i)=>{
+        const [x1,y1]=P(CAP[a]),[x2,y2]=P(CAP[b]);
+        // long wrong edges get a gentle arc so the violet web reads as flight paths
+        const mx=(x1+x2)/2, my=(y1+y2)/2, dx=x2-x1, dy=y2-y1, len=Math.hypot(dx,dy);
+        const bend=(L.id==="fp"?0.13:0.02)*len;
+        const cx=mx-dy/len*bend, cy=my+dx/len*bend;
+        const p=el("path",{d:`M${x1},${y1} Q${cx},${cy} ${x2},${y2}`,fill:"none",
+          stroke:L.col,"stroke-width":L.w,opacity:0,"stroke-linecap":"round"},svg);
+        if(L.dash)p.setAttribute("stroke-dasharray",L.dash);
+        p.style.transition=`opacity .5s ease ${Math.min(i*18,900)}ms`;
+        requestAnimationFrame(()=>requestAnimationFrame(()=>p.style.opacity=L.op));
+      });
+    });
+    cap.innerHTML=`<b>The k-NN(4) centroid graph vs the true border graph.</b>
+      <span style="color:#9a86d8">Violet = the 62 hallucinated adjacencies</span> (Albania alone contributes 10,
+      spanning the continent: Albania–Estonia, Albania–Belarus…), while
+      <span style="color:#c2553f">37 real borders are missed</span> — including France–Spain and France–Italy.
+      <span style="color:#7fc97f">Only 23 of 85 edges are real.</span> This is the H3 premise, drawn:
+      proximity in PCA-32 activation space is not geography.`;
+  }
   const io=new IntersectionObserver(es=>{ if(es[0].isIntersecting){render();io.disconnect();} },{threshold:.25});
   io.observe(svg);
 })();
