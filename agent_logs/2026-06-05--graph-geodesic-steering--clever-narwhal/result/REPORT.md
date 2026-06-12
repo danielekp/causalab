@@ -73,6 +73,18 @@ raw centroid proximity at this site/representation.
 even at Norway's own centroid — weak centroid or signature domination); mutual-neighbor
 endpoints flicker (Portugal↔Spain). Neither affects F1–F4.
 
+**F6 — Shuffle control passes (run 8): F1 is not a spline artifact.** Refitting the
+manifold with a permuted country↔lat/lon assignment (`embedding_shuffle_seed=0`,
+recon_mse 0.54 vs the canonical fit) and re-steering the geometric mode yields decoded
+chains with similar intermediate *counts* but destroyed geographic *order*:
+border-contiguity of consecutive decoded subjects drops from **0.78 (18/23 transitions
+canonical)** to **0.38 (8/21 shuffled)**, with absurd jumps (Greece–Denmark,
+Spain–Poland). The canonical breaks are benign (Italy–Greece = the Mediterranean
+crossing). Residual shuffled contiguity ≈ 0.38 matches the k-NN border recall — i.e.,
+what remains is the representation's own neighbor structure, not the chart. The
+geographic ordering in F1 therefore comes from the alignment between the lat/lon chart
+and the activation geometry, not from TPS interpolation mechanics.
+
 ## Caveats
 
 - The geometric mode's chart is lat/lon-parameterized (`intrinsic_mode: parameter`):
@@ -85,11 +97,7 @@ endpoints flicker (Portugal↔Spain). Neither affects F1–F4.
 
 ## Highest-value next steps
 
-1. **Shuffle control** (cheap, decisive): refit the manifold with
-   `activation_manifold.embedding_shuffle_seed=<n>` (permute country↔lat/lon
-   assignment). If geodesics still decode contiguously, F1 is an artifact of the
-   spline; if they collapse, F1 is a property of the representation. Strongly
-   recommended before writing this up anywhere.
+1. ~~Shuffle control~~ — **done (run 8, F6): passed.**
 2. Per-class battery: patch all 30 centroids through patch_parity to map weak classes
    (Norway) and quantify mean argmax_expected across the full set.
 3. Quantify linear geography: Procrustes / correlation between 2-D PCA of L12
@@ -97,3 +105,5 @@ endpoints flicker (Portugal↔Spain). Neither affects F1–F4.
    spline-recoverable).
 4. Sweep graph_k / try graph over PCA-2 or spline-intrinsic coordinates to see if any
    data-derived graph recovers borders.
+5. More shuffle seeds (the contiguity gap 0.78 vs 0.38 is from one permutation; 3–5
+   seeds would give a null distribution for the contiguity statistic).
