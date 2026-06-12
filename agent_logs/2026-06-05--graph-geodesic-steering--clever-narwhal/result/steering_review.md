@@ -140,3 +140,17 @@ metric name next to the score.
 7. Optional probes: scale sweep α·centroid, α ∈ {0.5, 1, 2, 4} (centroid norm
    shrinkage); single-example counterfactual activations instead of centroids as a
    patchability upper bound.
+
+---
+
+## Addendum (2026-06-12): experiment 1 verdict
+
+Experiment 1 (patch_parity) ran on RunPod — see `result/patch_parity_verdict.md`.
+Outcome: **executor exonerated** (all patch arms bit-identical; no rank mismatch) and
+the real bug identified as **readout semantics**: the `country` variable is the
+question's *subject*, the correct answer is its *neighbor*
+(`NEIGHBOR_OF[(country, direction)]`), and every steering landscape scored
+p(patched-country token) — a token that is never the right answer. Locate scored 0.41
+because string_match checks the neighbor. Experiment 2 is redefined accordingly
+(rescore with expected-answer mass); experiments 3–7 stand but must use the
+expected-answer mapping in all scoring.

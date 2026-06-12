@@ -19,6 +19,14 @@ Verdict key: replica ≈ no_patch while interchange_source is well above it → 
 bug (shapefix succeeding pinpoints the rank mismatch). replica ≈ interchange_source →
 the flat landscapes were a full-vocab readout artifact.
 
+Run-1 verdict (2026-06-12): all three patch arms bit-identical, f_base already (B,H) —
+executor exonerated. The patch visibly sets the question's SUBJECT country (Spain patch
+→ Portugal/France answers), so p(target-country token) is the wrong readout for this
+task: the causal model maps country → NEIGHBOR_OF[(country, direction)]. The readout
+below therefore also scores expected-answer (neighbor) mass per prompt — the metric
+that locate's string_match scoring implicitly used, which is why locate saw 0.41 while
+every p(target)-based landscape sat at chance.
+
 Layering (ARCHITECTURE.md §3): depends on causalab/{neural,methods,io,tasks,runner.helpers}
 only; disk I/O through causalab.io.artifacts; every knob from cfg.patch_parity.* /
 cfg.task.* / cfg.seed; cfg.experiment_root is the single output-path root.
@@ -46,6 +54,7 @@ from causalab.neural.activations.intervenable_model import (
 )
 from causalab.neural.activations.interpolate import run_interpolation_interventions
 from causalab.runner.helpers import build_targets_for_grid, resolve_task
+from causalab.tasks.country_borders.config import NEIGHBOR_OF
 from causalab.tasks.loader import load_task_counterfactuals
 
 logger = logging.getLogger(__name__)
@@ -299,23 +308,57 @@ def main(cfg: DictConfig) -> dict[str, Any]:
             all_scores.append(out["scores"])
         return all_scores
 
-    def readout(raw_scores: list, target_idx: int) -> dict[str, Any]:
+    def expected_index_sets(country: str) -> list[list[int]]:
+        """Per-prompt CORRECT readout targets when `tv` is patched to `country`.
+
+        The causal model is raw_output = NEIGHBOR_OF[(country, direction)], so the
+        expected answer set for prompt j is the in-set neighbors of the *patched*
+        country in prompt j's direction — not the patched country itself. Empty list
+        = unanswerable cell (no in-set neighbor); excluded from expected-* metrics.
+        """
+        sets: list[list[int]] = []
+        for s in eval_samples:
+            direction = s["input"]["direction"]
+            names = NEIGHBOR_OF.get((country, direction), [])
+            sets.append([value_strs.index(n) for n in names if n in value_strs])
+        return sets
+
+    def readout(
+        raw_scores: list, target_idx: int, expected_sets: list[list[int]]
+    ) -> dict[str, Any]:
         joint_norm = scores_to_joint_probs(raw_scores, var_indices)
         joint_fvs = scores_to_joint_probs(raw_scores, var_indices, full_vocab_softmax=True)
         if joint_norm is None or joint_fvs is None:
             raise ValueError("Arm returned no scores; cannot compute readout.")
         joint_norm = joint_norm.float()
         joint_norm = joint_norm / joint_norm.sum(-1, keepdim=True).clamp(min=1e-10)
+        if joint_norm.shape[0] != len(expected_sets):
+            raise ValueError(
+                f"score rows ({joint_norm.shape[0]}) != eval prompts "
+                f"({len(expected_sets)}); prompt alignment broken."
+            )
         mean_norm = joint_norm.mean(dim=0)
         mean_fvs = joint_fvs.float().mean(dim=0)
         top = torch.topk(mean_norm, k=min(5, mean_norm.shape[0]))
+        argmaxes = joint_norm.argmax(dim=-1)
+        p_exp, argmax_exp, p_canon = [], [], []
+        for j, idxs in enumerate(expected_sets):
+            if not idxs:
+                continue
+            p_exp.append(joint_norm[j, idxs].sum().item())
+            argmax_exp.append(float(argmaxes[j].item() in idxs))
+            p_canon.append(joint_norm[j, idxs[0]].item())
+        n_valid = len(p_exp)
         return {
             "p_target_norm": mean_norm[target_idx].item(),
             "p_target_fullvocab": mean_fvs[target_idx].item(),
-            "argmax_match_rate": (joint_norm.argmax(dim=-1) == target_idx)
-            .float()
-            .mean()
-            .item(),
+            "argmax_match_rate": (argmaxes == target_idx).float().mean().item(),
+            # Correct readout: mass/argmax on the *expected answer* (neighbor) set
+            # for the patched country, per prompt direction.
+            "p_expected_norm": sum(p_exp) / n_valid if n_valid else None,
+            "p_canonical_norm": sum(p_canon) / n_valid if n_valid else None,
+            "argmax_expected_rate": sum(argmax_exp) / n_valid if n_valid else None,
+            "n_prompts_with_expected": n_valid,
             "mean_norm_dist": {
                 value_strs[i]: round(mean_norm[i].item(), 6) for i in range(n_values)
             },
@@ -337,6 +380,7 @@ def main(cfg: DictConfig) -> dict[str, Any]:
         if not mask[ci]:
             raise ValueError(f"no centroid for {country!r} (no training rows)")
         centroid = raw_centroids[ci]
+        exp_sets = expected_index_sets(country)
 
         per_country[country] = {}
         for arm in arms:
@@ -348,13 +392,14 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                 scores = run_interpolation(_make_shapefix_fn(centroid, shape_probe))
             else:  # ARM_NO_PATCH — shared across countries
                 scores = no_patch_scores
-            per_country[country][arm] = readout(scores, ci)
+            per_country[country][arm] = readout(scores, ci, exp_sets)
             logger.info(
-                "%s / %s: p_target_norm=%.4f argmax_match=%.3f",
+                "%s / %s: p_expected_norm=%s argmax_expected=%s p_target_norm=%.4f",
                 country,
                 arm,
+                per_country[country][arm]["p_expected_norm"],
+                per_country[country][arm]["argmax_expected_rate"],
                 per_country[country][arm]["p_target_norm"],
-                per_country[country][arm]["argmax_match_rate"],
             )
 
     results: dict[str, Any] = {

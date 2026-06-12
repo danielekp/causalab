@@ -38,24 +38,32 @@ patch_parity:
 
 ### Interpretation
 
-- `results.json → per_country.<C>.<arm>`: compare `p_target_norm` and
-  `argmax_match_rate` across arms. **`interpolation_replica ≈ no_patch` while
-  `interchange_source` is well above** → the steering executor silently drops the
-  patch; if `interpolation_shapefix` recovers `interchange_source`'s numbers, the
-  `(B,1,H)` vs `(B,H)` rank mismatch in `collect.py`'s `replace_fn` is confirmed and
-  the fix is to expand the replacement to `f_base`'s shape.
-  **`interpolation_replica ≈ interchange_source`** → the executor is fine and the flat
-  landscapes were a full-vocab readout artifact: re-read existing steering results
-  concept-normalized (review experiment 2).
+**Run-1 verdict (2026-06-12):** all three patch arms came back bit-identical and
+`shape_probe` showed `f_base_shape == [16, 2560]` — the executor is exonerated and the
+rank-mismatch hypothesis is dead. The patched-country top-5s (Spain → Portugal/France;
+Russia → Poland/Ukraine/Belarus) revealed the real bug: the intervened variable is the
+question's *subject* country and the causal model answers with its *neighbor*
+(`raw_output = NEIGHBOR_OF[(country, direction)]`), so `p_target_norm` /
+`argmax_match_rate` score a token that is never the correct answer. The readout now
+also reports the correct metrics:
+
+- `p_expected_norm` / `argmax_expected_rate` / `p_canonical_norm`: per-prompt mass /
+  argmax-rate / canonical-neighbor mass on `NEIGHBOR_OF[(patched_country,
+  prompt_direction)]` — what locate's string_match scoring implicitly measured
+  (hence its 0.41 while every p(target)-based landscape sat at chance). Prompts whose
+  (patched country, direction) cell has no in-set neighbor are excluded
+  (`n_prompts_with_expected` counts the rest). Compare each patch arm against
+  `no_patch` on these.
+- `p_target_norm` / `argmax_match_rate` (kept for continuity): mass on the patched
+  country itself — the *wrong* readout for this task; expect ≈ chance even when the
+  intervention works.
 - `results.json → shape_probe`: gathered `f_base` rank inside the interpolation
-  intervention. `f_base_shape == [B, 1, H]` with `replica_out_shape == [B, H]` is the
-  smoking gun for the rank hypothesis.
-- `no_patch` also calibrates the floor: per-country `p_target_norm` under no
-  intervention (≈ the model's marginal preference for that country).
+  intervention (run 1: already `(B, H)`, no mismatch).
+- `no_patch` calibrates the floor for both readouts.
 
 ### Saved artifacts
 
 | File | Contents |
 |---|---|
-| `results.json` | `{site, value_labels, shape_probe, per_country.<C>.<arm>.{p_target_norm, p_target_fullvocab, argmax_match_rate, mean_norm_dist, top5}}` |
+| `results.json` | `{site, value_labels, shape_probe, per_country.<C>.<arm>.{p_expected_norm, p_canonical_norm, argmax_expected_rate, n_prompts_with_expected, p_target_norm, p_target_fullvocab, argmax_match_rate, mean_norm_dist, top5}}` |
 | `metadata.json` | resolved knobs + site + model/task provenance |
