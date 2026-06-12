@@ -1,4 +1,13 @@
 # @package _global_
+# MUST stay session-local: run_exp.sh injects the session Hydra --config-dir only when
+# the runner config itself is session-local (same constraint as
+# country_borders_patch_parity.yaml).
+#
+# Defaults point at the VALIDATED steering site (patch_parity verdict 2026-06-12):
+# L12 / `country` token position, subspace pca_k32_ctok. The earlier L33/last_token
+# site is trivial for steering (final layer freezes the output to the patched
+# centroid's marginal). path_modes is NOT pinned here — the analysis config supplies
+# it (including the `oracle` true-border route mode).
 defaults:
   - /base
   - /task: country_borders
@@ -8,10 +17,9 @@ defaults:
 task:
   target_variable: country
 graph_path_steering:
-  subspace: pca_k32
-  activation_manifold: L33_last_token/spline_s0.0
+  subspace: pca_k32_ctok
+  activation_manifold: L12_country/spline_s0.0
   selected_pairs: [["Spain", "Russia"]]
-  path_modes: [graph_geodesic, geometric, linear]
   graph_k: 4
   steps_per_segment: 6
   visualization:
