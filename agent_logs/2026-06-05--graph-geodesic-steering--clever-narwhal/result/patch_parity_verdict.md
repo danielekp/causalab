@@ -159,3 +159,27 @@ pipeline.** All downstream scoring must use the subject/neighbor-signature reado
   signature. Fixed by an echo-augmented decode (signature additionally claims the
   subject's own token), emitted side-by-side as `subject_decode_sequence_echo`
   (run 6).
+
+---
+
+## Addendum: echo decode results (2026-06-12, run 6) — headline result
+
+Echo-augmented decode (Spain→Russia):
+
+| mode | echo-decoded subjects | intermediates |
+|---|---|---|
+| oracle | (Portugal) → Spain → France → Germany → Poland → Belarus → Russia | **5 — every control point recovered exactly** |
+| geometric | Spain → France → Italy → Austria → Poland → Ukraine → Russia | **5 — contiguous sweep, NO supplied route** |
+| graph_geodesic | Portugal → France → Italy → Ukraine → Russia | 4 (faithful to its non-geographic route) |
+| linear | Portugal → Spain → Ukraine → Belarus → Russia | 3 (skips central Europe — chord leaves the manifold) |
+
+- Oracle's exact control-point recovery proves steering+decode fidelity end-to-end;
+  run-5's one-country-over drift was pure echo bias.
+- **Geometric is the headline**: with only two endpoints and the lat/lon-parameterized
+  spline, intermediate geodesic points decode to *working representations of
+  geographically intermediate countries* (direction-conditioned answers downstream).
+  H2 strongly supported at a computational site.
+- Linear's Spain→Ukraine jump is the clean negative control: the straight chord
+  crosses empty activation space.
+- Run 7 queued: robustness pairs Portugal→Finland, Greece→Norway, Portugal→Greece
+  (BFS true-border oracle routes added to config).

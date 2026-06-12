@@ -13,15 +13,23 @@ subspace: pca_k32                     # subspace dir under ${experiment_root}/su
 activation_manifold: L33_last_token/spline_s0.0  # manifold cell under activation_manifold/${subspace}/
 
 # What to steer and compare.
-selected_pairs: [["Spain", "Russia"]] # endpoint country pairs
+selected_pairs:
+  - ["Spain", "Russia"]
+  - ["Portugal", "Finland"]
+  - ["Greece", "Norway"]
+  - ["Portugal", "Greece"]
 path_modes: [graph_geodesic, geometric, linear, oracle]  # graph route, manifold geodesic, straight line, geographic-oracle route
 
-# Oracle routes (mode `oracle`): hand-specified geographic routes, every edge a true
-# border in the task's NEIGHBOR_OF table. Steered exactly like graph_geodesic
-# (piecewise-linear between raw centroids, identity featurizer) — isolates route
-# quality from route construction. Keyed "<start>_<end>" per selected pair.
+# Oracle routes (mode `oracle`): geographic routes where every edge is a true border
+# in the task's NEIGHBOR_OF table (BFS shortest paths over the symmetrized table).
+# Steered exactly like graph_geodesic (piecewise-linear between raw centroids,
+# identity featurizer) — isolates route quality from route construction.
+# Keyed "<start>_<end>" per selected pair.
 oracle_routes:
   Spain_Russia: [Spain, France, Germany, Poland, Belarus, Russia]
+  Portugal_Finland: [Portugal, Spain, France, Germany, Denmark, Norway, Finland]
+  Greece_Norway: [Greece, Bulgaria, Romania, Ukraine, Russia, Norway]
+  Portugal_Greece: [Portugal, Spain, France, Germany, Austria, Hungary, Romania, Bulgaria, Greece]
 
 # Graph-geodesic knobs (consumed by methods.centroid_graph_geodesic).
 graph_k: 4                            # k for the k-NN centroid graph (auto-bumped if disconnected)

@@ -19,7 +19,7 @@ task:
 graph_path_steering:
   subspace: pca_k32_ctok
   activation_manifold: L12_country/spline_s0.0
-  selected_pairs: [["Spain", "Russia"]]
+  # selected_pairs / path_modes / oracle_routes come from the analysis config.
   graph_k: 4
   steps_per_segment: 6
   visualization:
