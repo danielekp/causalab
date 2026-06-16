@@ -1,0 +1,28 @@
+# @package directional_isometry
+# Hydra config for the session-local analysis `directional_isometry`.
+# Mounted at cfg.directional_isometry via the # @package directive.
+# Picked up automatically when CAUSALAB_SESSION_CODE is set (scripts/run_exp.sh).
+
+_name_: directional_isometry          # sentinel — must match ANALYSIS_NAME in main.py
+_subdir: ${.subspace}/${.activation_manifold}
+_output_dir: ${experiment_root}/directional_isometry/${._subdir}
+
+# Pin the validated country_borders fit (same cells as graph_path_steering /
+# the option-(a) path_steering isometry run).
+subspace: pca_k32_ctok                # subspace dir under ${experiment_root}/subspace/
+activation_manifold: L12_country/spline_s0.0  # cell under activation_manifold/${subspace}/
+
+# Belief (behavior) manifold fit.
+smoothness: 0.0                       # exact TPS interpolation through the fingerprints
+
+# Direction-conditioned fingerprint: per-direction answer distributions concatenated in
+# THIS fixed order (must cover every direction that appears in the dataset).
+direction_order: [N, NE, E, SE, S, SW, W, NW]
+
+# Isometry knobs (consumed by methods.scores.isometry.compute_isometry_from_manifolds).
+n_arc_steps: 150                      # arc-length sampling resolution along each geodesic
+n_interior_per_pair: 0                # 0 = centroid-pairs only (cleanest first number)
+path_modes: [geometric, linear]       # on-manifold arc vs straight chord
+
+visualization:
+  figure_format: pdf

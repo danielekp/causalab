@@ -1,0 +1,36 @@
+# @package _global_
+# Option-(b) of the Fig 2/3 isometry reproduction: a DIRECTION-CONDITIONED behavior
+# manifold vs the activation manifold, country_borders / Gemma3-4B-PT, at the validated
+# L12/country site. Compare its geometric/linear r against the direction-AVERAGED
+# option-(a) numbers (geometric 0.20, linear 0.03 from the path_steering isometry run).
+#
+# MUST stay session-local (run_exp.sh injects the session Hydra --config-dir only for
+# session-local runners). Runs a single session-local analysis, `directional_isometry`.
+#
+# MODEL-FREE: reuses output_manifold's cached per_example_output_dists +
+# the cached activation manifold; loads only a weights-free lite pipeline. No OOM.
+#
+# Prerequisites already on disk under experiment_root (do NOT re-run):
+#   - subspace/pca_k32_ctok/country
+#   - activation_manifold/pca_k32_ctok/L12_country/spline_s0.0/country   (intrinsic_dim=2)
+#   - output_manifold/per_example_output_dists.safetensors
+#
+# Launch on the pod:
+#   CAUSALAB_SESSION_CODE=/workspace/causalab/agent_logs/2026-06-05--graph-geodesic-steering--clever-narwhal \
+#   bash scripts/run_exp.sh \
+#     --experiment-root /workspace/causalab/artifacts/country_borders/gemma3_4b_pt \
+#     country_borders_directional_isometry
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: gemma3_4b_pt
+  - /analysis/directional_isometry
+  - _self_
+
+task:
+  target_variable: country
+
+directional_isometry:
+  subspace: pca_k32_ctok
+  activation_manifold: L12_country/spline_s0.0
+  n_interior_per_pair: 0
