@@ -1,0 +1,65 @@
+# @package _global_
+# Minimal regeneration of the Fig 2/3 isometry artifacts for country_borders /
+# Gemma3-4B-PT, after the pod wipe took output_manifold/ and the path_steering
+# isometry tree. Surviving on disk: subspace/pca_k32, activation_manifold (a
+# parameter-mode 2-D lat/lon TPS), baseline, locate.
+#
+# Produces only what make_fig3_composite.py needs, at the lowest compute/OOM:
+#   step 1  output_manifold  -> belief TPS + hellinger_pca + per_example dists.
+#           THE ONLY model-loading step (forward pass over the train set).
+#   step 2  path_steering with recompute_isometry=true -> loads the LITE
+#           pipeline (no weights, no OOM), computes the isometry D-matrices for
+#           geometric (arc length) and linear (chord) from the two cached
+#           manifolds, and saves criteria/isometry/{geometric,linear}/.
+#
+# run_exp.py runs the two steps in defaults order and frees GPU memory between
+# them, so the output_manifold model is released before the isometry step.
+#
+# The structural-correspondence (PCA) panels are rebuilt model-free by
+# make_fig3_composite.py straight from the manifolds, so NO steered paths /
+# dual_manifold pass is needed here (that was the heavier, OOM-prone work).
+#
+# Run on the pod (from repo root):
+#   CAUSALAB_SESSION_CODE=/workspace/causalab/agent_logs/2026-06-05--graph-geodesic-steering--clever-narwhal \
+#   scripts/run_exp.sh \
+#     --experiment-root /workspace/causalab/artifacts/country_borders/gemma3_4b_pt \
+#     country_borders_fig3_isometry
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: gemma3_4b_pt
+  - /analysis/output_manifold
+  - /analysis/path_steering
+  - _self_
+
+task:
+  target_variable: country
+
+# Belief manifold in the SAME (lat, lon) parameterization as the activation
+# manifold (intrinsic_dim=2), so control points align by class index — the
+# isometry metric raises on a dim mismatch.
+output_manifold:
+  intrinsic_mode: parameter
+  intrinsic_dim: 2
+  smoothness: 0.0
+
+path_steering:
+  # Reuse the SURVIVING activation manifold (subspace name is pca_k32 on disk,
+  # NOT pca_k32_ctok).
+  subspace: pca_k32
+  activation_manifold: L12_country/spline_s0.0
+  # No model, no interventions: recompute isometry straight from the manifolds.
+  recompute_isometry: true
+  eval_criteria:
+    - isometry
+  path_modes:
+    - geometric
+    - linear
+  # Bonus per-mode scatter + MDS PNG/HTML from the saved D-matrices. dual_manifold
+  # / path_visualization are intentionally absent (they need steered paths).
+  visualizations:
+    - isometry_visualization
+  selected_pairs: null
+  isometry:
+    n_arc_steps: 150
+    n_interior_per_pair: 1  # densify the scatter with 1 interior point per pair geodesic
