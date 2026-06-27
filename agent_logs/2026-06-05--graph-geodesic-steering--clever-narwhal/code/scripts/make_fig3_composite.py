@@ -369,14 +369,16 @@ def render(act, bel, iso_geo, iso_lin, out_path: str, title: str):
         ax.set_ylabel("Behavior manifold path length", fontsize=9)
         ax.tick_params(labelsize=7)
 
-    # Behavior-space color uses the belief manifold's latitude ordering;
-    # both rows share the same per-centroid latitude scalar.
-    bel_color = bel["color"]
-    act_color = act["color"]
+    # MDS panels embed the FULL isometry vertex set (V = W + interior points),
+    # so color by the per-vertex latitude the isometry run saved, not the W
+    # manifold centroids. Same vertex order across geometric/linear tensors.
+    V = iso_geo["D_output"].shape[0]
+    iso_color = (iso_geo["grid"][:, 0] if iso_geo.get("grid") is not None
+                 and iso_geo["grid"].shape[0] == V else np.arange(V))
 
     # Row 0: Behavior space
     pca_cell(0, bel, "Behavior space", cloud_key="cloud")
-    mds_panel(0, [(mds3(iso_geo["D_output"]), None, "o")], bel_color,
+    mds_panel(0, [(mds3(iso_geo["D_output"]), None, "o")], iso_color,
               "Behavior Space MDS")
     scatter_panel(0, iso_geo, "Manifold paths")
 
@@ -385,7 +387,7 @@ def render(act, bel, iso_geo, iso_lin, out_path: str, title: str):
     act_embeds = [(mds3(iso_geo["D_manifold"]), "Manifold", "o")]
     if iso_lin is not None:
         act_embeds.append((mds3(iso_lin["D_manifold"]), "Linear", "^"))
-    mds_panel(1, act_embeds, act_color, "Activation Space MDS")
+    mds_panel(1, act_embeds, iso_color, "Activation Space MDS")
     scatter_panel(1, iso_lin if iso_lin is not None else iso_geo,
                   "Linear paths" if iso_lin is not None else "Manifold paths")
 
