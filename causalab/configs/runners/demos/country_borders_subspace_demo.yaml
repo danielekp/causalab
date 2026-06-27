@@ -11,10 +11,10 @@ task:
 
 subspace:
   method: pca
-  # Single layer (no sweep): Gemma 3 4B's final layer, index 33.
+  # Single layer (no sweep): localized site for the country variable, layer 12.
   # Downstream activation_manifold/path_steering cells lock onto this layer.
-  layers: [33]
+  layers: [12]
   k_features: 32
-  token_positions: [last_token]
+  token_positions: [country]
   visualization:
     figure_format: png

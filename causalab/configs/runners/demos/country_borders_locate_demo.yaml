@@ -6,7 +6,7 @@ defaults:
   - /analysis/locate
   - _self_
 task:
-  enumerate_all: true # Enumerate all examples in the training set, test = []
+  enumerate_all: true # Enumerate all examples in the training set, test = train
   intervention_metric: string_match
   resample_variable: all # <-- changing to all variables, since we don't use counterfactual pairs anyways, the centroids will be our counterfactual pairs.
   target_variable: country

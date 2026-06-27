@@ -1,0 +1,9 @@
+# @package _global_
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: gemma3_4b_pt
+  - _self_
+task:
+  enumerate_all: true
+  target_variable: country
