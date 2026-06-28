@@ -243,7 +243,7 @@ svg text{user-select:none}
       <em>“which country lies to the {direction} of {country}?”</em> — and used the causalab pipeline,
       end to end, to ask whether the model's representation of those countries is <strong>literally a map</strong>.
       It is: two principal components of the country centroids regress onto latitude and longitude with
-      <strong>R² 0.89 and 0.83</strong>, and a thin-plate-spline manifold charted by capital coordinates
+      <strong>R² 0.89 and 0.83</strong> (at the final layer, L33/last-token), and a thin-plate-spline manifold charted by capital coordinates
       lets you <strong>walk between countries</strong> — with the model decoding every intermediate stop
       as a real place along the route.
     </p>
@@ -306,9 +306,13 @@ svg text{user-select:none}
   <h2>Two principal components <em>are</em> latitude and longitude</h2>
   <p class="lede">
     Group the PCA-32 activations by answer country, average into 30 centroids, and regress each principal component
-    on capital (lat, lon): <strong>PC0 R² = 0.893, PC1 R² = 0.830, PC2 R² = 0.042</strong>. The geographic plane isn't
+    on capital (lat, lon): <strong>PC0 R² = 0.893, PC1 R² = 0.830, PC2 R² = 0.042</strong> — measured at
+    <strong>layer 33 / last-token</strong>, the model's final-layer read-out. The geographic plane isn't
     buried somewhere in the 2560-dimensional residual stream — it is the <strong>top of the spectrum</strong>, and it
-    is two-dimensional, exactly as a map should be.
+    is two-dimensional, exactly as a map should be. <em>But this clean map is a read-out, not the lever:</em> the
+    steering experiments below act at a <strong>different site — layer 12 / country-token</strong>, where the same
+    geography is present but far less linearly legible (PC R² ≈ 0.82 / 0.20) and, unlike the frozen final layer,
+    causally live.
   </p>
 
   <div class="vs reveal">
@@ -359,8 +363,11 @@ svg text{user-select:none}
   <p class="body" style="margin-top:2rem">
     Worth pausing on what kind of claim this is: nothing in the task's training signal hands the model coordinates.
     The (lat, lon) embedding lives only in the <em>causal model</em>, as the parameterization your spline machinery
-    consumes. The R² says the representation independently agrees with that parameterization — which is exactly the
-    precondition for the steering experiments that follow.
+    consumes. The R² says the <strong>final-layer</strong> representation independently agrees with that parameterization.
+    The steering that follows, though, runs one site upstream at <strong>layer 12 / country-token</strong>: the cleanest
+    geographic <em>read-out</em> lives at the last layer, but the causally <em>steerable</em> map lives mid-depth — the
+    same geography, linearly messier (R² ≈ 0.82 / 0.20), but the only place where pushing the representation moves the
+    model's reasoning.
   </p>
 </section>
 
@@ -398,7 +405,7 @@ svg text{user-select:none}
       <div class="figcap"><b>Site validation, direction-aware (argmax on the expected-neighbor set, 64 prompts).</b>
       Russia is the diagnostic case — 8 neighbors spread over directions. A frozen final-layer marginal caps at 0.083;
       at L12/country the model re-binds the patched subject to the prompt's direction: <b>0.417, ten times the no-patch
-      floor</b>. All geometry work happens at this site (<span class="mono">subspace pca_k32_ctok</span>).</div>
+      floor</b>. All steering geometry happens at this site (<span class="mono">subspace pca_k32_ctok</span>) — distinct from the L33/last-token read-out that produced the lat/lon map above.</div>
     </div>
   </div>
 </section>
