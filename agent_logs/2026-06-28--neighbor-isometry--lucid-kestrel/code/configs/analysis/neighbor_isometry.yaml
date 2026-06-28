@@ -1,0 +1,28 @@
+# @package neighbor_isometry
+# Hydra config for the session-local analysis `neighbor_isometry`.
+# Mounted at cfg.neighbor_isometry via the # @package directive.
+# The runner's session-code search path picks this file up automatically when
+# CAUSALAB_SESSION_CODE is set (set by scripts/run_exp.sh whenever
+# --experiment-root lives under agent_logs/).
+#
+# MODEL-FREE: this analysis never calls load_pipeline. It consumes cached
+# activation features (subspace step) and cached per-example output dists
+# (output_manifold step), so it loads no model weights.
+
+_name_: neighbor_isometry            # sentinel — must match ANALYSIS_NAME in main.py
+_subdir: default                     # single output tree; directions are looped inside
+_output_dir: ${experiment_root}/neighbor_isometry/${._subdir}
+
+subspace: pca_k32                    # subspace dir name under ${experiment_root}/subspace/
+activation_features: null            # null -> auto-discover training_features.safetensors under subspace/<subspace>/**/features/
+output_manifold_sub: null            # null -> auto-discover under ${experiment_root}/output_manifold/**/ (per_example_output_dists.safetensors)
+directions: null                     # null -> all 8 directions from the task config
+n_arc_steps: 150                     # geodesic arc resolution (matches the prior isometry run)
+n_interior_per_pair: 1               # densify the scatter with 1 interior point per pair geodesic
+smoothness: 0.0                      # TPS smoothness for BOTH manifolds (0.0 = exact interpolation, matches prior run)
+path_modes: [geometric, linear]      # isometry distance metrics to compute
+baseline_geometric_r: 0.204          # prior direction-marginalized subject isometry (for the summary comparison)
+baseline_linear_r: 0.033
+
+visualization:
+  figure_format: pdf                 # png or pdf — invariant 6

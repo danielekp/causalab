@@ -1,0 +1,31 @@
+# @package _global_
+# Neighbor-output isometry — per-direction subject walk (country_borders / Gemma3-4B-PT).
+#
+# Runs ONLY the session-local, MODEL-FREE `neighbor_isometry` analysis. It consumes cached
+# artifacts (no model load, no OOM):
+#   - subspace/pca_k32/**/training_features.safetensors  (L12 country-token features, k=32)
+#   - output_manifold/**/per_example_output_dists.safetensors  (per-example dists over 30 countries + other)
+# and writes neighbor_isometry/ (per-direction isometry D-matrices + summary.json).
+#
+# The 8 compass directions are looped INSIDE the analysis (no sweep). Dataset params come from the
+# task default (enumerate_all: true -> the 664-example full enumeration that the cache was built
+# from); the analysis verifies cache↔reconstruction alignment with an argmax-vs-neighbor gate and
+# raises if they disagree.
+#
+# Run on the pod (from repo root) — CAUSALAB_SESSION_CODE is set EXPLICITLY because experiment_root
+# points at the global artifacts tree (not under agent_logs/), so the wrapper's auto-detection of
+# session-local code does not fire on its own (run_exp.sh:89-91 honours an explicit value):
+#
+#   CAUSALAB_SESSION_CODE=/workspace/causalab/agent_logs/2026-06-28--neighbor-isometry--lucid-kestrel \
+#   scripts/run_exp.sh \
+#     --experiment-root /workspace/causalab/artifacts/country_borders/gemma3_4b_pt \
+#     country_borders_neighbor_isometry
+defaults:
+  - /base
+  - /task: country_borders
+  - /model: gemma3_4b_pt
+  - /analysis/neighbor_isometry
+  - _self_
+
+task:
+  target_variable: country
