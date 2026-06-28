@@ -328,7 +328,9 @@ def main(cfg: DictConfig) -> dict[str, Any]:
                 "act_centroids": act_centroids,
                 "act_mean": act_mean,
                 "act_std": act_std,
-                "bel_control_points": control,
+                # clone: act and bel control points are identical by construction, but
+                # safetensors refuses to serialize two keys aliasing the same storage.
+                "bel_control_points": control.clone(),
                 "bel_centroids_prob": bel_prob,
             },
             d_out,
